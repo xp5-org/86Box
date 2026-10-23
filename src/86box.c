@@ -67,6 +67,7 @@
 #include <86box/softpower.h>
 #include <86box/ibm5140_power.h>
 #include <86box/novell_cardkey.h>
+#include <86box/isa_bridge.h>
 #include <86box/mcamem.h>
 #include <86box/isamem.h>
 #include <86box/isarom.h>
@@ -2053,6 +2054,11 @@ pc_reset_hard_init(void)
 
     if (novell_keycard_enabled)
         device_add(&novell_keycard_device);
+
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        if (isa_bridge_enabled[i])
+            device_add_inst(&isa_bridge_device, i + 1);
+    }
 
     if (IS_ARCH(machine, MACHINE_BUS_PCI) ||
         IS_ARCH(machine, MACHINE_BUS_AGP) ||

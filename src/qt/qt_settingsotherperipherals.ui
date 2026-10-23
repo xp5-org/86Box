@@ -535,6 +535,201 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="tabIsaBridge">
+      <attribute name="icon">
+       <iconset resource="../qt_resources.qrc">
+        <normaloff>:/settings/qt/icons/other_peripherals.ico</normaloff>:/settings/qt/icons/other_peripherals.ico</iconset>
+      </attribute>
+      <attribute name="title">
+       <string>External ISA Bridge</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayoutIsaBridge">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayoutIsaBridgeList">
+         <item>
+          <widget class="QListWidget" name="listIsaBridges">
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>96</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>External devices (Verilog / FPGA) attached to the ISA bus, each through its own shared memory file.</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayoutIsaBridgeButtons">
+           <item>
+            <widget class="QPushButton" name="pushButtonIsaBridgeNew">
+             <property name="text">
+              <string>+ New</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButtonIsaBridgeRemove">
+             <property name="text">
+              <string>Remove</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacerIsaBridgeButtons">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>0</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBoxIsaBridgeSel">
+         <property name="title">
+          <string>Selected bridge</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayoutIsaBridgeSel">
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutIsaBridgeCfg">
+            <item>
+             <widget class="QPushButton" name="pushButtonConfigureIsaBridge">
+              <property name="text">
+               <string>Configure</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacerIsaBridge">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBoxIsaBridgeRom">
+            <property name="toolTip">
+             <string>Mapped read-only at the address and size set under Configure, so the BIOS option-ROM scan finds it even before the device is running. Takes effect after a reset.</string>
+            </property>
+            <property name="text">
+             <string>Option ROM (video / disk controller BIOS)</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="FileField" name="fileFieldIsaBridgeRom" native="true">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutIsaBridgeServer">
+            <item>
+             <widget class="QLabel" name="labelIsaBridgeServer">
+              <property name="text">
+               <string>Device:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEditIsaBridgeServer">
+              <property name="toolTip">
+               <string>The program that simulates the card (e.g. the Verilator build). Run from a shell; it creates the shared memory file named under Configure. Launch again after it exits.</string>
+              </property>
+              <property name="placeholderText">
+               <string>Path to the simulator binary, plus any arguments</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButtonIsaBridgeServer">
+              <property name="text">
+               <string>Launch</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBoxIsaBridgeServerAuto">
+            <property name="text">
+             <string>Launch when the emulator starts</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayoutIsaBridgeMonitor">
+            <item>
+             <widget class="QLabel" name="labelIsaBridgeMonitor">
+              <property name="text">
+               <string>Monitor:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEditIsaBridgeMonitor">
+              <property name="toolTip">
+               <string>Any program a shell can start (pygame, Qt, OpenGL, ...). 86Box only starts it; the viewer and the device talk to each other directly. Launch again after closing it.</string>
+              </property>
+              <property name="placeholderText">
+               <string>Command to run, e.g. python3 /path/viewer.py</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButtonIsaBridgeMonitor">
+              <property name="text">
+               <string>Launch</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBoxIsaBridgeMonitorAuto">
+            <property name="text">
+             <string>Launch when the emulator starts</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacerIsaBridge">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="tabVFIO">
       <attribute name="icon">
        <iconset resource="../qt_resources.qrc">
@@ -677,6 +872,18 @@
   <tabstop>pushButtonConfigureIsaRomCard3</tabstop>
   <tabstop>comboBoxIsaRomCard4</tabstop>
   <tabstop>pushButtonConfigureIsaRomCard4</tabstop>
+  <tabstop>listIsaBridges</tabstop>
+  <tabstop>pushButtonIsaBridgeNew</tabstop>
+  <tabstop>pushButtonIsaBridgeRemove</tabstop>
+  <tabstop>pushButtonConfigureIsaBridge</tabstop>
+  <tabstop>checkBoxIsaBridgeRom</tabstop>
+  <tabstop>fileFieldIsaBridgeRom</tabstop>
+  <tabstop>lineEditIsaBridgeServer</tabstop>
+  <tabstop>pushButtonIsaBridgeServer</tabstop>
+  <tabstop>checkBoxIsaBridgeServerAuto</tabstop>
+  <tabstop>lineEditIsaBridgeMonitor</tabstop>
+  <tabstop>pushButtonIsaBridgeMonitor</tabstop>
+  <tabstop>checkBoxIsaBridgeMonitorAuto</tabstop>
   <tabstop>treeViewVFIO</tabstop>
   <tabstop>checkBoxVFIOCustomROM</tabstop>
   <tabstop>fileFieldVFIOROM</tabstop>

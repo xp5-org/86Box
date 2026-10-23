@@ -39,6 +39,8 @@ add_library(dev OBJECT
     mcamem.c
     isamem.c
     isarom.c
+    isa_bridge.c
+    bus_bridge.c
     isartc.c
     isapnp.c
     kbc_3270pc.c

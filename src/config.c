@@ -43,6 +43,7 @@
 #include <string.h>
 #include <stdlib.h>
 #define HAVE_STDARG_H
+#include <86box/isa_bridge.h>
 #include <86box/86box.h>
 #include "cpu.h"
 #include <86box/device.h>
@@ -2675,6 +2676,20 @@ load_other_peripherals(void)
     postcard_enabled       = !!ini_section_get_int(cat, "postcard_enabled", 0);
     unittester_enabled     = !!ini_section_get_int(cat, "unittester_enabled", 0);
     novell_keycard_enabled = !!ini_section_get_int(cat, "novell_keycard_enabled", 0);
+
+    /* External ISA bridges: isa_bridge<n>_enabled, n = 1..ISA_BRIDGE_MAX.
+       The old single-bridge key means slot 1. */
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        char key[32];
+
+        snprintf(key, sizeof(key), "isa_bridge%i_enabled", i + 1);
+        isa_bridge_enabled[i] = !!ini_section_get_int(cat, key, 0);
+        if (!isa_bridge_enabled[i])
+            ini_section_delete_var(cat, key);
+    }
+    if (ini_section_get_int(cat, "isa_bridge_enabled", 0))
+        isa_bridge_enabled[0] = 1;
+    ini_section_delete_var(cat, "isa_bridge_enabled");
     softpower_enabled      = !!ini_section_get_int(cat, "softpower_enabled", 0);
 
     if (!bugger_enabled)
@@ -4200,6 +4215,16 @@ save_other_peripherals(void)
         ini_section_delete_var(cat, "novell_keycard_enabled");
     else
         ini_section_set_int(cat, "novell_keycard_enabled", novell_keycard_enabled);
+
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        char key[32];
+
+        snprintf(key, sizeof(key), "isa_bridge%i_enabled", i + 1);
+        if (isa_bridge_enabled[i] == 0)
+            ini_section_delete_var(cat, key);
+        else
+            ini_section_set_int(cat, key, 1);
+    }
 
     if (softpower_enabled == 0)
         ini_section_delete_var(cat, "softpower_enabled");

@@ -17,6 +17,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include <QListWidgetItem>
+#include <QStringBuilder>
+
 #ifdef USE_VFIO
 #    include <algorithm>
 #    include <cstring>
@@ -26,7 +29,6 @@
 #    include <QHash>
 #    include <QProcess>
 #    include <QStandardItemModel>
-#    include <QStringBuilder>
 #endif
 
 extern "C" {
@@ -40,6 +42,9 @@ extern "C" {
 #include <86box/unittester.h>
 #include <86box/softpower.h>
 #include <86box/novell_cardkey.h>
+#include <86box/ini.h>
+#include <86box/config.h>
+#include <86box/isa_bridge.h>
 #ifdef USE_VFIO
 #    include <86box/vfio.h>
 #endif
@@ -54,9 +59,7 @@ extern "C" {
 #include "qt_models_common.hpp"
 
 #include "qt_defs.hpp"
-#ifdef USE_VFIO
-#    include "qt_util.hpp"
-#endif
+#include "qt_util.hpp"
 
 static bool
 hasIsaOrSidecarBus(int machineId)
@@ -239,6 +242,50 @@ SettingsOtherPeripherals::SettingsOtherPeripherals(QWidget *parent)
     softpower_card_enabled     = softpower_enabled > 0;
     novell_keycard_cfg_changed = 0;
 
+    /* External ISA bridges: a short list plus the controls for the
+       selected entry. */
+    ui->fileFieldIsaBridgeRom->setMinimumWidth(0);
+    ui->fileFieldIsaBridgeRom->setMaximumWidth(QWIDGETSIZE_MAX);
+    ui->fileFieldIsaBridgeRom->setFilter(tr("ROM images") % util::DlgFilter({ "bin", "rom", "vbi" }) % tr("All files") % util::DlgFilter({ "*" }, true));
+    connect(ui->fileFieldIsaBridgeRom, &FileField::fileSelected, this,
+            [this](const QString &fn, bool) {
+                const int s = isaBridgeCurrentSlot();
+                if (!isaBridgeUpdating && s >= 0)
+                    isaBridge[s].romFile = fn;
+            });
+    connect(ui->fileFieldIsaBridgeRom, &FileField::fileTextEntered, this,
+            [this](const QString &fn, bool) {
+                const int s = isaBridgeCurrentSlot();
+                if (!isaBridgeUpdating && s >= 0)
+                    isaBridge[s].romFile = fn;
+            });
+    connect(ui->lineEditIsaBridgeServer, &QLineEdit::textChanged, this,
+            [this](const QString &text) {
+                const int s = isaBridgeCurrentSlot();
+                if (!isaBridgeUpdating && s >= 0)
+                    isaBridge[s].serverCmd = text;
+            });
+    connect(ui->checkBoxIsaBridgeServerAuto, &QCheckBox::toggled, this,
+            [this](bool on) {
+                const int s = isaBridgeCurrentSlot();
+                if (!isaBridgeUpdating && s >= 0)
+                    isaBridge[s].serverAuto = on;
+            });
+    connect(ui->lineEditIsaBridgeMonitor, &QLineEdit::textChanged, this,
+            [this](const QString &text) {
+                const int s = isaBridgeCurrentSlot();
+                if (!isaBridgeUpdating && s >= 0)
+                    isaBridge[s].monitorCmd = text;
+            });
+    connect(ui->checkBoxIsaBridgeMonitorAuto, &QCheckBox::toggled, this,
+            [this](bool on) {
+                const int s = isaBridgeCurrentSlot();
+                if (!isaBridgeUpdating && s >= 0)
+                    isaBridge[s].monitorAuto = on;
+            });
+    isaBridgeLoad();
+    isaBridgeRefreshList(-1);
+
 #ifdef USE_VFIO
     vfioModel = new VFIODeviceModel(this);
     vfioModel->setHorizontalHeaderLabels({ QString(), tr("Group"), tr("Location"), tr("ID"), tr("Name") });
@@ -319,6 +366,7 @@ SettingsOtherPeripherals::onCurrentMachineChanged(int machineId)
     ui->pushButtonConfigureRTC->setEnabled(machineHasIsaOrSidecar);
     ui->comboBoxRTC->setEnabled(machineHasIsaOrSidecar);
     ui->checkBoxISABugger->setEnabled(machineHasIsa);
+    ui->tabIsaBridge->setEnabled(machineHasIsa);
     ui->pushButtonConfigureUT->setEnabled(unittester_enabled > 0);
     ui->checkBoxKeyCard->setEnabled(machineHasIsa);
     ui->pushButtonConfigureKeyCard->setEnabled(novell_keycard_enabled > 0);
@@ -466,6 +514,9 @@ SettingsOtherPeripherals::changed()
     has_changed |= (novell_keycard_enabled != (ui->checkBoxKeyCard->isChecked() ? 1 : 0));
     has_changed |= novell_keycard_cfg_changed;
 
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++)
+        has_changed |= isaBridgeSlotDiffers(i);
+
     /* Memory expansion boards (shared slots; active family by machine). */
     {
         const bool mca_bus = (machine_has_bus(machineId, MACHINE_BUS_MCA) > 0);
@@ -512,6 +563,40 @@ SettingsOtherPeripherals::save(int soft)
     unittester_enabled     = ui->checkBoxUnitTester->isChecked() ? 1 : 0;
     softpower_enabled      = softpower_card_enabled ? 1 : 0;
     novell_keycard_enabled = ui->checkBoxKeyCard->isChecked() ? 1 : 0;
+
+    /* External ISA bridges. */
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        char sec[64];
+
+        isa_bridge_section(i + 1, sec, sizeof(sec));
+        isa_bridge_enabled[i] = isaBridge[i].enabled ? 1 : 0;
+        if (!isaBridge[i].enabled) {
+            isa_bridge_delete_config(i + 1);
+        } else {
+            isa_bridge_seed_defaults(i + 1);
+            if (isaBridge[i].romEnabled)
+                config_set_int(sec, "rom_enabled", 1);
+            else
+                config_delete_var(sec, "rom_enabled");
+            if (isaBridge[i].romFile.isEmpty())
+                config_delete_var(sec, "rom_fn");
+            else
+                config_set_string(sec, "rom_fn", isaBridge[i].romFile.toUtf8().constData());
+            if (isaBridge[i].serverCmd.isEmpty())
+                config_delete_var(sec, "server_cmd");
+            else
+                config_set_string(sec, "server_cmd", isaBridge[i].serverCmd.toUtf8().constData());
+            config_set_int(sec, "server_auto", isaBridge[i].serverAuto ? 1 : 0);
+            if (isaBridge[i].monitorCmd.isEmpty())
+                config_delete_var(sec, "monitor_cmd");
+            else
+                config_set_string(sec, "monitor_cmd", isaBridge[i].monitorCmd.toUtf8().constData());
+            config_set_int(sec, "monitor_auto", isaBridge[i].monitorAuto ? 1 : 0);
+        }
+        isaBridgeOrig[i]            = isaBridge[i];
+        isaBridgeOrig[i].cfgChanged = 0;
+        isaBridge[i].cfgChanged     = 0;
+    }
 
     /* Memory expansion boards (shared slots; write the active family and
        clear the inactive one, matching the single-UI layout). */
@@ -738,6 +823,193 @@ void
 SettingsOtherPeripherals::on_pushButtonConfigureKeyCard_clicked()
 {
     novell_keycard_cfg_changed |= DeviceConfig::ConfigureDevice(&novell_keycard_device);
+}
+
+/* ---- External ISA Bridge tab ---------------------------------------- */
+
+void
+SettingsOtherPeripherals::isaBridgeLoad()
+{
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        char sec[64];
+
+        isa_bridge_section(i + 1, sec, sizeof(sec));
+        isaBridge[i].enabled     = isa_bridge_enabled[i] != 0;
+        isaBridge[i].romEnabled  = config_get_int(sec, "rom_enabled", 0) != 0;
+        isaBridge[i].romFile     = QString::fromUtf8(config_get_string(sec, "rom_fn", ""));
+        isaBridge[i].serverCmd   = QString::fromUtf8(config_get_string(sec, "server_cmd", ""));
+        isaBridge[i].serverAuto  = config_get_int(sec, "server_auto", 0) != 0;
+        isaBridge[i].monitorCmd  = QString::fromUtf8(config_get_string(sec, "monitor_cmd", ""));
+        isaBridge[i].monitorAuto = config_get_int(sec, "monitor_auto", 0) != 0;
+        isaBridge[i].cfgChanged  = 0;
+        isaBridgeOrig[i]         = isaBridge[i];
+    }
+}
+
+int
+SettingsOtherPeripherals::isaBridgeCurrentSlot() const
+{
+    const auto *item = ui->listIsaBridges->currentItem();
+
+    return item ? item->data(Qt::UserRole).toInt() : -1;
+}
+
+bool
+SettingsOtherPeripherals::isaBridgeSlotDiffers(int slot) const
+{
+    const IsaBridgeSlot &cur  = isaBridge[slot];
+    const IsaBridgeSlot &orig = isaBridgeOrig[slot];
+
+    if (cur.enabled != orig.enabled)
+        return true;
+    if (!cur.enabled)
+        return false;
+    return cur.cfgChanged || (cur.romEnabled != orig.romEnabled) || (cur.romFile != orig.romFile)
+        || (cur.serverCmd != orig.serverCmd) || (cur.serverAuto != orig.serverAuto)
+        || (cur.monitorCmd != orig.monitorCmd) || (cur.monitorAuto != orig.monitorAuto);
+}
+
+/* One line per fitted bridge: enough to tell them apart at a glance. */
+void
+SettingsOtherPeripherals::isaBridgeRefreshList(int selectSlot)
+{
+    int keep = (selectSlot >= 0) ? selectSlot : isaBridgeCurrentSlot();
+    int row  = -1;
+    int used = 0;
+
+    isaBridgeUpdating = true;
+    ui->listIsaBridges->clear();
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        char sec[64];
+
+        if (!isaBridge[i].enabled)
+            continue;
+        used++;
+        isa_bridge_section(i + 1, sec, sizeof(sec));
+        const int     base = config_get_hex16(sec, "base", 0x300);
+        const int     irq  = config_get_int(sec, "irq", 5);
+        const QString shm  = QString::fromUtf8(config_get_string(sec, "shm_path", ""));
+        const QString text = tr("#%1   I/O %2h   %3   %4")
+                                 .arg(i + 1)
+                                 .arg(QString::number(base, 16).toUpper().rightJustified(3, QChar('0')))
+                                 .arg(irq ? tr("IRQ %1").arg(irq) : tr("no IRQ"))
+                                 .arg(shm.isEmpty() ? QString("/dev/shm/isabridge%1").arg(i + 1) : shm);
+        auto         *item = new QListWidgetItem(text, ui->listIsaBridges);
+        item->setData(Qt::UserRole, i);
+        if (i == keep)
+            row = ui->listIsaBridges->count() - 1;
+    }
+    if ((row < 0) && (ui->listIsaBridges->count() > 0))
+        row = 0;
+    ui->listIsaBridges->setCurrentRow(row);
+    isaBridgeUpdating = false;
+
+    ui->pushButtonIsaBridgeNew->setEnabled(used < ISA_BRIDGE_MAX);
+    isaBridgeShowSelected();
+}
+
+void
+SettingsOtherPeripherals::isaBridgeShowSelected()
+{
+    const int  s  = isaBridgeCurrentSlot();
+    const bool on = (s >= 0);
+
+    isaBridgeUpdating = true;
+    ui->pushButtonIsaBridgeRemove->setEnabled(on);
+    ui->groupBoxIsaBridgeSel->setEnabled(on);
+    ui->checkBoxIsaBridgeRom->setChecked(on && isaBridge[s].romEnabled);
+    ui->fileFieldIsaBridgeRom->setFileName(on ? isaBridge[s].romFile : QString());
+    ui->fileFieldIsaBridgeRom->setEnabled(on && isaBridge[s].romEnabled);
+    ui->lineEditIsaBridgeServer->setText(on ? isaBridge[s].serverCmd : QString());
+    ui->checkBoxIsaBridgeServerAuto->setChecked(on && isaBridge[s].serverAuto);
+    ui->pushButtonIsaBridgeServer->setEnabled(on);
+    ui->lineEditIsaBridgeMonitor->setText(on ? isaBridge[s].monitorCmd : QString());
+    ui->checkBoxIsaBridgeMonitorAuto->setChecked(on && isaBridge[s].monitorAuto);
+    ui->pushButtonIsaBridgeMonitor->setEnabled(on);
+    isaBridgeUpdating = false;
+}
+
+void
+SettingsOtherPeripherals::on_listIsaBridges_currentRowChanged(int row)
+{
+    Q_UNUSED(row);
+    if (!isaBridgeUpdating)
+        isaBridgeShowSelected();
+}
+
+void
+SettingsOtherPeripherals::on_pushButtonIsaBridgeNew_clicked()
+{
+    for (int i = 0; i < ISA_BRIDGE_MAX; i++) {
+        if (isaBridge[i].enabled)
+            continue;
+        isaBridge[i]            = IsaBridgeSlot();
+        isaBridge[i].enabled    = true;
+        /* Own I/O base, window, IRQ and shm file from the start, so the
+           new entry doesn't land on top of the others. */
+        isa_bridge_seed_defaults(i + 1);
+        isaBridgeRefreshList(i);
+        return;
+    }
+}
+
+void
+SettingsOtherPeripherals::on_pushButtonIsaBridgeRemove_clicked()
+{
+    const int s = isaBridgeCurrentSlot();
+
+    if (s < 0)
+        return;
+    isaBridge[s].enabled = false;
+    isaBridgeRefreshList(-1);
+}
+
+void
+SettingsOtherPeripherals::on_pushButtonConfigureIsaBridge_clicked()
+{
+    const int s = isaBridgeCurrentSlot();
+
+    if (s < 0)
+        return;
+    isaBridge[s].cfgChanged |= DeviceConfig::ConfigureDevice(&isa_bridge_device, s + 1);
+    isaBridgeRefreshList(s);
+}
+
+void
+SettingsOtherPeripherals::on_checkBoxIsaBridgeRom_stateChanged(int arg1)
+{
+    const int s = isaBridgeCurrentSlot();
+
+    ui->fileFieldIsaBridgeRom->setEnabled((s >= 0) && (arg1 != 0));
+    if (!isaBridgeUpdating && (s >= 0))
+        isaBridge[s].romEnabled = (arg1 != 0);
+}
+
+void
+SettingsOtherPeripherals::on_pushButtonIsaBridgeServer_clicked()
+{
+    const int s = isaBridgeCurrentSlot();
+    char      sec[64];
+
+    if (s < 0)
+        return;
+    isa_bridge_section(s + 1, sec, sizeof(sec));
+    config_set_string(sec, "server_cmd", isaBridge[s].serverCmd.toUtf8().constData());
+    isa_bridge_launch_server(s + 1);
+}
+
+void
+SettingsOtherPeripherals::on_pushButtonIsaBridgeMonitor_clicked()
+{
+    const int s = isaBridgeCurrentSlot();
+    char      sec[64];
+
+    if (s < 0)
+        return;
+    /* The launcher reads the command from the slot's config section. */
+    isa_bridge_section(s + 1, sec, sizeof(sec));
+    config_set_string(sec, "monitor_cmd", isaBridge[s].monitorCmd.toUtf8().constData());
+    isa_bridge_launch_monitor(s + 1);
 }
 
 #ifdef USE_VFIO
