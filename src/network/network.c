@@ -437,6 +437,11 @@ network_queue_clear(netqueue_t *queue)
     queue->tail = queue->head = 0;
 }
 
+#ifdef USE_RMM
+/* The attached cards, by slot, for the monitor's snapshots. */
+static netcard_t *rmm_netcards[NET_CARD_MAX];
+#endif
+
 static void
 network_rx_queue(void *priv)
 {
@@ -607,6 +612,10 @@ network_attach(void *card_drv, uint8_t *mac, NETRXCB rx, NETSETLINKSTATE set_lin
 
     timer_add(&card->timer, network_rx_queue, card, 0);
     timer_on_auto(&card->timer, 100);
+#ifdef USE_RMM
+    if (card->card_num < NET_CARD_MAX)
+        rmm_netcards[card->card_num] = card;
+#endif
 
     return card;
 }
@@ -614,6 +623,11 @@ network_attach(void *card_drv, uint8_t *mac, NETRXCB rx, NETSETLINKSTATE set_lin
 void
 netcard_close(netcard_t *card)
 {
+#ifdef USE_RMM
+    for (int i = 0; i < NET_CARD_MAX; i++)
+        if (rmm_netcards[i] == card)
+            rmm_netcards[i] = NULL;
+#endif
     timer_stop(&card->timer);
     card->host_drv.close(card->host_drv.priv);
 
@@ -909,3 +923,17 @@ network_card_get_from_old_internal_name(char *s)
 
     return NULL;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: each attached card's poll timer, so a snapshot file can place it. The packet queues and the host
+   side (the link to the real network) are not part of the machine and keep running; packets in flight are not rolled back. */
+void
+network_rmm_snap(rmm_snap_t *s)
+{
+    for (int i = 0; i < NET_CARD_MAX; i++)
+        if (rmm_netcards[i])
+            rmm_snap_raw(s, &rmm_netcards[i]->timer, sizeof(rmm_netcards[i]->timer));
+}
+#endif

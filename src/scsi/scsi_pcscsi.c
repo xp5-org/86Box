@@ -2734,3 +2734,14 @@ const device_t ncr53c90a_mca_device = {
     .config        = NULL,
     .short_name    = "NCR 53c90A"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+scsi_pcscsi_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(esp_t));
+}
+#endif

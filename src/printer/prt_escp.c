@@ -2474,3 +2474,36 @@ const device_t lpt_prt_escp_device = {
     .force_redraw  = NULL,
     .config        = lpt_prt_escp_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the printer's modes, head position and the page of pixels. The port, file
+   names and the FreeType face stay live; the face is reloaded for the restored font settings. */
+void
+prt_escp_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    escp_t     *dev   = (escp_t *) priv;
+    escp_t     *keep  = (escp_t *) malloc(sizeof(escp_t));
+    psurface_t  pkeep = *dev->page;
+
+    if (!keep)
+        fatal("RMM: out of memory saving the ESC/P printer\n");
+    memcpy(keep, dev, sizeof(escp_t));
+    rmm_snap_raw(s, dev, sizeof(escp_t));
+    dev->name     = keep->name;
+    dev->lpt      = keep->lpt;
+    memcpy(dev->page_fn, keep->page_fn, sizeof(dev->page_fn));
+    memcpy(dev->fontpath, keep->fontpath, sizeof(dev->fontpath));
+    memcpy(dev->pagepath, keep->pagepath, sizeof(dev->pagepath));
+    dev->page     = keep->page;
+    dev->fontface = keep->fontface;
+    free(keep);
+    rmm_snap_raw(s, dev->page, sizeof(psurface_t));
+    dev->page->pixels = pkeep.pixels;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->page->pixels, (size_t) dev->page->h * dev->page->pitch);
+    if (rmm_snap_restoring(s) && ft_lib)
+        update_font(dev);
+}
+#endif

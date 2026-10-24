@@ -2292,3 +2292,61 @@ codegen_set_rounding_mode(int mode)
     /* cpu_state.new_npxc = (cpu_state.old_npxc & ~0xc00) | (mode << 10); */
 }
 #endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: descriptor tables, control and debug registers, SMM and interrupt state. */
+void
+cpu386_common_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, gdt);
+    RMM_SNAP_VAR(s, ldt);
+    RMM_SNAP_VAR(s, idt);
+    RMM_SNAP_VAR(s, tr);
+    RMM_SNAP_VAR(s, cr2);
+    RMM_SNAP_VAR(s, cr3);
+    RMM_SNAP_VAR(s, cr4);
+    RMM_SNAP_VAR(s, dr);
+    RMM_SNAP_VAR(s, use32);
+    RMM_SNAP_VAR(s, stack32);
+    RMM_SNAP_VAR(s, cpu_init);
+    RMM_SNAP_VAR(s, nmi_enable);
+    RMM_SNAP_VAR(s, alt_access);
+    RMM_SNAP_VAR(s, cpl_override);
+    RMM_SNAP_VAR(s, cpu_cur_status);
+    RMM_SNAP_VAR(s, cpu_fast_off_period);
+    RMM_SNAP_VAR(s, cpu_fast_off_timer);
+    RMM_SNAP_VAR(s, new_ne);
+    RMM_SNAP_VAR(s, in_sys);
+    RMM_SNAP_VAR(s, unmask_a20_in_smm);
+    RMM_SNAP_VAR(s, old_rammask);
+    RMM_SNAP_VAR(s, soft_reset_mask);
+    RMM_SNAP_VAR(s, smi_latched);
+    RMM_SNAP_VAR(s, smm_in_hlt);
+    RMM_SNAP_VAR(s, smi_block);
+    RMM_SNAP_VAR(s, prefetch_prefixes);
+    RMM_SNAP_VAR(s, rf_flag_no_clear);
+    RMM_SNAP_VAR(s, tempc);
+    RMM_SNAP_VAR(s, oldcpl);
+    RMM_SNAP_VAR(s, optype);
+    RMM_SNAP_VAR(s, inttype);
+    RMM_SNAP_VAR(s, oddeven);
+    RMM_SNAP_VAR(s, timetolive);
+    RMM_SNAP_VAR(s, oldcs);
+    RMM_SNAP_VAR(s, oldds);
+    RMM_SNAP_VAR(s, oldss);
+    RMM_SNAP_VAR(s, olddslimit);
+    RMM_SNAP_VAR(s, oldsslimit);
+    RMM_SNAP_VAR(s, olddslimitw);
+    RMM_SNAP_VAR(s, oldsslimitw);
+    RMM_SNAP_VAR(s, oxpc);
+    RMM_SNAP_VAR(s, rmdat32);
+    RMM_SNAP_VAR(s, backupregs);
+    RMM_SNAP_VAR(s, _oldds);
+    RMM_SNAP_VAR(s, rep_op);
+    RMM_SNAP_VAR(s, is_smint);
+    RMM_SNAP_VAR(s, io_port);
+    RMM_SNAP_VAR(s, io_val);
+}
+#endif

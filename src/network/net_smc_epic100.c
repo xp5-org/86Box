@@ -1308,3 +1308,19 @@ const device_t smc_epic100_device = {
     .alias         = "SMC EtherPower II 9432",
     .config        = epic100_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+net_smc_epic100_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    epic100_t *dev = (epic100_t *) priv;
+    uint8_t save_mmio_mapping[sizeof(dev->mmio_mapping)];
+
+    memcpy(save_mmio_mapping, &dev->mmio_mapping, sizeof(dev->mmio_mapping));
+    rmm_snap_raw(s, dev, sizeof(epic100_t));
+    memcpy(&dev->mmio_mapping, save_mmio_mapping, sizeof(dev->mmio_mapping));
+}
+#endif

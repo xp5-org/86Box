@@ -444,3 +444,14 @@ const device_t mouse_upc_standalone_device = {
     .force_redraw  = NULL,
     .config        = upc_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; the KBC port it points at belongs to the keyboard pass. */
+void
+mouse_upc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(mouse_upc_t));
+}
+#endif

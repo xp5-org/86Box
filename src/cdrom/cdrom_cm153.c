@@ -326,3 +326,20 @@ const device_t philips_cm153_device = {
     .reset = cm153_reset,
     .config = cm153_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+extern void cm100_rmm_snap(rmm_snap_t *s, cm100_drive_t *d);
+
+/* Monitor snapshots: interface card and CM100 drive core. */
+void
+cm153_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    cm153_t *card = (cm153_t *) priv;
+
+    rmm_snap_raw(s, card, sizeof(*card));
+    if (card->drive)
+        cm100_rmm_snap(s, card->drive);
+}
+#endif

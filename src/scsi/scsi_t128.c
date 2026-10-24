@@ -643,3 +643,14 @@ const device_t scsi_pas_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded NCR 5380, copied back in place. */
+void
+t128_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(t128_t));
+}
+#endif

@@ -1603,3 +1603,19 @@ const device_t dp83815_onboard_device = {
     .config        = &dp83815_config[1]
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+net_dp83815_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    dp83815_t *dev = (dp83815_t *) priv;
+    uint8_t save_mmio_mapping[sizeof(dev->mmio_mapping)];
+
+    memcpy(save_mmio_mapping, &dev->mmio_mapping, sizeof(dev->mmio_mapping));
+    rmm_snap_raw(s, dev, sizeof(dp83815_t));
+    memcpy(&dev->mmio_mapping, save_mmio_mapping, sizeof(dev->mmio_mapping));
+}
+#endif

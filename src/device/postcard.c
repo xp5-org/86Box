@@ -253,3 +253,20 @@ const device_t postcard_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the latched POST codes and diagnostic text (file statics). The port is configuration. */
+void
+postcard_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    (void) priv;
+    RMM_SNAP_VAR(s, postcard_codes);
+    RMM_SNAP_VAR(s, postcard_diags);
+    RMM_SNAP_VAR(s, postcard_written);
+    RMM_SNAP_VAR(s, postcard_prev_codes);
+    RMM_SNAP_VAR(s, postcard_dell_mode);
+    RMM_SNAP_VAR(s, postcard_prev_diags);
+}
+#endif

@@ -948,3 +948,17 @@ const device_t ati28800_wonderxl24_device = {
     .config        = ati28800_wonderxl_config
 };
 #endif /* USE_XL24 */
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_ati28800_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ati28800_t *dev = (ati28800_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(ati28800_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

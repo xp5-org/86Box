@@ -742,3 +742,31 @@ const device_t cassette_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the tape state. The tape file is the host's: it is put back at the saved
+   position, and a tape open for saving blocks the snapshot, since its contents would change. */
+void
+cassette_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    pc_cassette_t *cas   = (pc_cassette_t *) priv;
+    FILE          *fp    = cas->fp;
+    char          *fname = cas->fname;
+
+    rmm_snap_raw(s, cas, sizeof(pc_cassette_t));
+    cas->fp    = fp;
+    cas->fname = fname;
+    if (rmm_snap_restoring(s) && fp)
+        (void) fseek(fp, (long) cas->position, SEEK_SET);
+}
+
+const char *
+cassette_rmm_snap_blocked(void)
+{
+    if (cassette && cassette->fp && cassette->save)
+        return "the cassette is open for saving (the tape file changes under the snapshot)";
+    return NULL;
+}
+#endif

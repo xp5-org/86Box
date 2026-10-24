@@ -3152,3 +3152,89 @@ mem_a20_recalc(void)
 
     mem_a20_state = state;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor bus access: as mem_readb_phys() and mem_writeb_phys(), but ROMCS mappings
+   go through their handlers. */
+uint8_t
+mem_rmm_readb_phys(uint32_t addr)
+{
+    mem_mapping_t *map = read_mapping_bus[addr >> MEM_GRANULARITY_BITS];
+
+    if (map && (map->flags & MEM_MAPPING_IS_ROM) && map->read_b) {
+        mem_logical_addr = 0xffffffff;
+        return map->read_b(addr, map->priv);
+    }
+    return mem_readb_phys(addr);
+}
+
+void
+mem_rmm_writeb_phys(uint32_t addr, uint8_t val)
+{
+    mem_mapping_t *map = write_mapping_bus[addr >> MEM_GRANULARITY_BITS];
+
+    if (map && (map->flags & MEM_MAPPING_IS_ROM)) {
+        mem_logical_addr = 0xffffffff;
+        if (map->write_b)
+            map->write_b(addr, val, map->priv);
+        return;
+    }
+    mem_writeb_phys(addr, val);
+}
+
+/* Monitor snapshots: RAM, access state and mappings. Lookup tables are rebuilt
+   by mem_rmm_snap_done(). */
+void
+mem_rmm_snap(rmm_snap_t *s)
+{
+    size_t sz = ram_size;
+
+    RMM_SNAP_VAR(s, sz);
+    if (sz != ram_size) /* refused earlier by rmm_snap.c */
+        return;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ram, ram_size);
+    RMM_SNAP_VAR(s, _mem_state);
+    rmm_snap_data(s);
+    RMM_SNAP_VAR(s, _mem_wp);
+    RMM_SNAP_VAR(s, _mem_wp_bus);
+    RMM_SNAP_VAR(s, base_mapping);
+    RMM_SNAP_VAR(s, last_mapping);
+    RMM_SNAP_VAR(s, ram_low_mapping);
+    RMM_SNAP_VAR(s, ram_mid_mapping);
+    RMM_SNAP_VAR(s, ram_mid_mapping2);
+    RMM_SNAP_VAR(s, ram_remapped_mapping);
+    RMM_SNAP_VAR(s, ram_remapped_mapping2);
+    RMM_SNAP_VAR(s, ram_high_mapping);
+    RMM_SNAP_VAR(s, ram_split_mapping);
+    RMM_SNAP_VAR(s, bios_mapping);
+    RMM_SNAP_VAR(s, bios_high_mapping);
+    RMM_SNAP_VAR(s, rammask);
+    RMM_SNAP_VAR(s, mem_a20_reset_vector_bypass);
+    RMM_SNAP_VAR(s, shadowbios);
+    RMM_SNAP_VAR(s, shadowbios_write);
+    RMM_SNAP_VAR(s, cachesize);
+    RMM_SNAP_VAR(s, mem_a20_key);
+    RMM_SNAP_VAR(s, mem_a20_alt);
+    RMM_SNAP_VAR(s, mem_a20_chipset);
+    RMM_SNAP_VAR(s, mem_a20_state);
+    RMM_SNAP_VAR(s, remap_start_addr);
+    RMM_SNAP_VAR(s, remap_start_addr2);
+    RMM_SNAP_VAR(s, high_page);
+}
+
+/* Rebuild mapping tables, drop TLB entries and translated code. */
+void
+mem_rmm_snap_done(void)
+{
+    mem_mapping_recalc(0, 0x100000000ULL, 0);
+    flushmmucache();
+#    ifdef USE_DYNAREC
+    codegen_reset(); /* as resetx86 does */
+#    endif
+    mem_reset_page_blocks();
+    mem_invalidate_range(0, (uint32_t) (ram_size - 1));
+}
+#endif

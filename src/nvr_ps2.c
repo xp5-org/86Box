@@ -217,3 +217,24 @@ const device_t ps2_nvr_8kb_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the index and the RAM. The backing file name and the RAM buffer stay live. */
+void
+ps2_nvr_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ps2_nvr_t *nvr = (ps2_nvr_t *) priv;
+    uint8_t   *ram = nvr->ram;
+    char      *fn  = nvr->fn;
+    int        size = nvr->size;
+
+    rmm_snap_raw(s, nvr, sizeof(ps2_nvr_t));
+    nvr->ram  = ram;
+    nvr->fn   = fn;
+    nvr->size = size;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, nvr->ram, (size_t) nvr->size);
+}
+#endif

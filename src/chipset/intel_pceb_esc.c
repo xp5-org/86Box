@@ -1831,3 +1831,30 @@ const device_t pceb_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the ESC struct; its I/O APIC window stays live (the memory pass owns the mapping). */
+void
+esc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    esc_t        *dev = (esc_t *) priv;
+    mem_mapping_t apic;
+
+    memcpy(&apic, &dev->apic_mapping, sizeof(apic));
+    rmm_snap_raw(s, dev, sizeof(esc_t));
+    memcpy(&dev->apic_mapping, &apic, sizeof(apic));
+}
+#endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the PCEB struct. */
+void
+pceb_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(pceb_t));
+}
+#endif

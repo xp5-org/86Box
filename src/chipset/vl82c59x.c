@@ -689,3 +689,14 @@ const device_t vl82c59x_wildcat_compaq_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+vl82c59x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(vl82c59x_t));
+}
+#endif

@@ -501,3 +501,19 @@ const device_t jukopc_device = {
     .force_redraw  = NULL,
     .config        = jukopc_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+m_xt_jukost_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    juko_st_t *dev = (juko_st_t *) priv;
+    uint8_t save_window_mapping[sizeof(dev->window_mapping)];
+
+    memcpy(save_window_mapping, &dev->window_mapping, sizeof(dev->window_mapping));
+    rmm_snap_raw(s, dev, sizeof(juko_st_t));
+    memcpy(&dev->window_mapping, save_window_mapping, sizeof(dev->window_mapping));
+}
+#endif

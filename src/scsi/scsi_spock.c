@@ -1333,3 +1333,14 @@ const device_t tribble_device = {
     .config        = spock_rom_config,
     .short_name    = "IBM Tribble"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+scsi_spock_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(spock_t));
+}
+#endif

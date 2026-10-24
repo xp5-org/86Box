@@ -1375,3 +1375,21 @@ const device_t ibm3270pc_vid_device = {
     .force_redraw  = NULL,
     .config        = pc3270_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_3270pc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    pc3270_t *dev = (pc3270_t *) priv;
+    uint8_t *b0 = dev->tram;
+    uint8_t *b1 = dev->cram;
+
+    rmm_snap_raw(s, dev, sizeof(pc3270_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, PC3270_TRAM_SIZE);
+    rmm_snap_raw(s, b1, PC3270_CRAM_SIZE);
+}
+#endif

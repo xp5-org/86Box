@@ -466,3 +466,19 @@ const device_t sis_5511_h2p_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+sis_5511_h2p_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sis_5511_host_to_pci_t *dev = (sis_5511_host_to_pci_t *) priv;
+    uint8_t save_slic_mapping[sizeof(dev->slic_mapping)];
+
+    memcpy(save_slic_mapping, &dev->slic_mapping, sizeof(dev->slic_mapping));
+    rmm_snap_raw(s, dev, sizeof(sis_5511_host_to_pci_t));
+    memcpy(&dev->slic_mapping, save_slic_mapping, sizeof(dev->slic_mapping));
+}
+#endif

@@ -209,3 +209,28 @@ const device_t ps1snd_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. The host-stream position and buffer are kept (releasenotes.txt). */
+void
+snd_ps1_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ps1snd_t *dev = (ps1snd_t *) priv;
+    unsigned char pos0[sizeof(dev->pos)];
+    unsigned char buf0[sizeof(dev->buffer)];
+    unsigned char pos1[sizeof(dev->sn76489.pos)];
+    unsigned char buf1[sizeof(dev->sn76489.buffer)];
+
+    memcpy(pos0, &dev->pos, sizeof(pos0));
+    memcpy(buf0, dev->buffer, sizeof(buf0));
+    memcpy(pos1, &dev->sn76489.pos, sizeof(pos1));
+    memcpy(buf1, dev->sn76489.buffer, sizeof(buf1));
+    rmm_snap_raw(s, dev, sizeof(ps1snd_t));
+    memcpy(&dev->pos, pos0, sizeof(pos0));
+    memcpy(dev->buffer, buf0, sizeof(buf0));
+    memcpy(&dev->sn76489.pos, pos1, sizeof(pos1));
+    memcpy(dev->sn76489.buffer, buf1, sizeof(buf1));
+}
+#endif

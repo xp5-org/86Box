@@ -836,3 +836,18 @@ const device_t sis_85c496_ls486e_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: chipset registers and I/O traps. */
+void
+sis_85c496_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sis_85c496_t *dev = (sis_85c496_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(sis_85c496_t));
+    for (int i = 0; i < 2; i++)
+        io_trap_rmm_snap(s, dev->io_traps[i].trap);
+}
+#endif

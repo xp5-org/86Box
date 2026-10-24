@@ -2982,6 +2982,23 @@ static const scancode scancode_pc200[512] = {
     // clang-format on
 };
 
+#ifdef USE_RMM
+/* Carries the machine struct for the monitor's snapshots; it has no hooks of its own. */
+static const device_t amstrad_rmm_device = {
+    .name          = "Amstrad machine state",
+    .internal_name = "amstrad_machine",
+    .flags         = 0,
+    .local         = 0,
+    .init          = NULL,
+    .close         = NULL,
+    .reset         = NULL,
+    .available     = NULL,
+    .speed_changed = NULL,
+    .force_redraw  = NULL,
+    .config        = NULL
+};
+#endif
+
 static void
 machine_amstrad_init(const machine_t *model, int type)
 {
@@ -3023,6 +3040,9 @@ machine_amstrad_init(const machine_t *model, int type)
     }
 
     ams->language = 7;
+#ifdef USE_RMM
+    device_add_ex(&amstrad_rmm_device, ams);
+#endif
 
     video_reset(gfxcard[0]);
 
@@ -3220,3 +3240,62 @@ machine_pc3086_init(const machine_t *model)
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the video controller of the PC1512, PC1640, PC200 and PPC512 (the CGA, MDA and EGA cores are
+   embedded in it) and the video RAM each of them keeps: the 1512's own 64 KB, the EGA's planes for the 1640, the
+   16 KB the CGA and MDA share for the PC200 and PPC512. */
+static void
+amsvid_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    amsvid_t *vid = (amsvid_t *) priv;
+    uint8_t  *vram = vid->vram;
+    uint8_t  *cga  = vid->cga.vram;
+
+    rmm_snap_raw(s, vid, sizeof(amsvid_t));
+    vid->vram     = vram;
+    vid->cga.vram = cga;
+    rmm_snap_data(s);
+    if (vram) {
+        rmm_snap_raw(s, vram, 0x10000);
+    } else if (vid->ega.vram) {
+        rmm_snap_raw(s, vid->ega.vram, 0x40000);
+        if (rmm_snap_restoring(s))
+            vid->ega.fullchange = changeframecount;
+    } else if (cga) {
+        rmm_snap_raw(s, cga, 0x4000);
+    }
+}
+
+/* The machine: keyboard and mouse interface, the language and DIP state, and the key queue in globals. */
+static void
+amstrad_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    amstrad_t *ams = (amstrad_t *) priv;
+    amsvid_t  *vid = ams->vid;
+    fdc_t     *fdc = ams->fdc;
+    lpt_t     *lpt = ams->lpt;
+
+    rmm_snap_raw(s, ams, sizeof(amstrad_t));
+    ams->vid = vid;
+    ams->fdc = fdc;
+    ams->lpt = lpt;
+    RMM_SNAP_VAR(s, amstrad_latch);
+    RMM_SNAP_VAR(s, key_queue);
+    RMM_SNAP_VAR(s, key_queue_start);
+    RMM_SNAP_VAR(s, key_queue_end);
+}
+
+/* The state device is private to this file, the four video devices carry the controller. */
+rmm_snap_fn
+amstrad_rmm_snap_fn(const device_t *dev)
+{
+    if (dev == &amstrad_rmm_device)
+        return amstrad_rmm_snap;
+    if ((dev == &vid_1512_device) || (dev == &vid_1640_device) || (dev == &vid_200_device) || (dev == &vid_ppc512_device))
+        return amsvid_rmm_snap;
+    return NULL;
+}
+#endif

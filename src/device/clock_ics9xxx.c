@@ -1278,3 +1278,29 @@ ics9xxx_get(uint8_t model)
 
     return dev;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the register file and the frequency selection. The model tables stay live. */
+static void
+ics9xxx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ics9xxx_t           *dev    = (ics9xxx_t *) priv;
+    ics9xxx_model_t     *model  = dev->model;
+    device_t            *dyn    = dev->dyn_device;
+    ics9xxx_frequency_t *freqs  = dev->frequencies_ptr;
+
+    rmm_snap_raw(s, dev, sizeof(ics9xxx_t));
+    dev->model           = model;
+    dev->dyn_device      = dyn;
+    dev->frequencies_ptr = freqs;
+}
+
+/* Every model is its own heap-built device_t, told apart by its init. */
+rmm_snap_fn
+ics9xxx_rmm_snap_fn(const device_t *dev)
+{
+    return (dev->init == ics9xxx_init) ? ics9xxx_rmm_snap : NULL;
+}
+#endif

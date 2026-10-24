@@ -864,3 +864,21 @@ const device_t compaq_plasma_device = {
     .force_redraw  = NULL,
     .config        = compaq_plasma_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_compaq_plasma_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    compaq_plasma_t *dev = (compaq_plasma_t *) priv;
+    uint8_t *b0 = dev->cga.vram;
+    uint8_t *b1 = dev->font_ram;
+
+    rmm_snap_raw(s, dev, sizeof(compaq_plasma_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x8000);
+    rmm_snap_raw(s, b1, 0x2000);
+}
+#endif

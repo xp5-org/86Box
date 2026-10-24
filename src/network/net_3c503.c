@@ -751,3 +751,19 @@ const device_t threec503_device = {
     .force_redraw  = NULL,
     .config        = threec503_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+net_3c503_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    threec503_t *dev = (threec503_t *) priv;
+    uint8_t save_ram_mapping[sizeof(dev->ram_mapping)];
+
+    memcpy(save_ram_mapping, &dev->ram_mapping, sizeof(dev->ram_mapping));
+    rmm_snap_raw(s, dev, sizeof(threec503_t));
+    memcpy(&dev->ram_mapping, save_ram_mapping, sizeof(dev->ram_mapping));
+}
+#endif

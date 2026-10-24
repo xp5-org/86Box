@@ -1719,3 +1719,52 @@ const device_t quadmeg_psq_4mb_76de_device = {
     .force_redraw  = NULL,
     .config        = quadmeg_psq_4mb_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card's translate table and registers, then its RAM. The buffer stays live. */
+void
+mxo_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mxo_t    *dev = (mxo_t *) priv;
+    uint8_t *ptr = dev->ram.ptr;
+    uint32_t kb  = dev->ram.size_kb;
+
+    rmm_snap_raw(s, dev, sizeof(mxo_t));
+    dev->ram.ptr     = ptr;
+    dev->ram.size_kb = kb;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ptr, (size_t) kb << 10);
+}
+
+/* Monitor snapshots: the card's translate table and registers, then its RAM. The buffer stays live. */
+void
+psq_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    psq_t    *dev = (psq_t *) priv;
+    uint8_t *ptr = dev->ram.ptr;
+    uint32_t kb  = dev->ram.size_kb;
+
+    rmm_snap_raw(s, dev, sizeof(psq_t));
+    dev->ram.ptr     = ptr;
+    dev->ram.size_kb = kb;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ptr, (size_t) kb << 10);
+}
+
+/* Monitor snapshots: the card's translate table and registers, then its RAM. The buffer stays live. */
+void
+xma_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    xma_t    *dev = (xma_t *) priv;
+    uint8_t *ptr = dev->ram.ptr;
+    uint32_t kb  = dev->ram.size_kb;
+
+    rmm_snap_raw(s, dev, sizeof(xma_t));
+    dev->ram.ptr     = ptr;
+    dev->ram.size_kb = kb;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ptr, (size_t) kb << 10);
+}
+#endif

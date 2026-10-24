@@ -1565,3 +1565,17 @@ const device_t paradise_wd90c31_onboard_device = {
     .force_redraw  = paradise_force_redraw,
     .config        = paradise_wd90c31_onboard_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_paradise_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    paradise_t *dev = (paradise_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(paradise_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

@@ -2596,3 +2596,16 @@ const device_t aztpr16_device = {
     .alias         = "AZTPR16",
     .config        = aztpr16_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded AD1848 core. The host-stream position and buffer are kept. */
+void
+snd_azt2316a_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    azt2316a_t *dev = (azt2316a_t *) priv;
+
+    ad1848_rmm_snap_embedded(s, &dev->ad1848, dev, sizeof(azt2316a_t));
+}
+#endif

@@ -5146,3 +5146,53 @@ const device_t qla12160a_device = {
     .short_name    = "ISP12160A",
     .scsi_buses    = ql_scsi_buses
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct (its two BAR windows stay live), then its heap: the flash BIOS array, the abort FIFO and the PIO payload buffer by value.
+   The FIFO and payload buffer come and go with the guest, so a restore reallocates them to the saved size. */
+void
+ql1xxx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ql_t         *dev      = (ql_t *) priv;
+    mem_mapping_t mmio     = dev->mmio_bar_mapping;
+    mem_mapping_t rom      = dev->rom_bar_mapping;
+    uint8_t      *flash    = dev->flash_device.array_data;
+    uint8_t      *fdata    = dev->abort_iocbs_fifo.data;
+    uint32_t      live_cap = dev->abort_iocbs_fifo.capacity;
+    uint8_t      *dbuf     = dev->scsi_data_buffer;
+    uint32_t      live_sz  = dev->scsi_data_size;
+    int           has      = (dbuf != NULL);
+    uint32_t      cap;
+
+    rmm_snap_raw(s, dev, sizeof(ql_t));
+    dev->mmio_bar_mapping         = mmio;
+    dev->rom_bar_mapping          = rom;
+    dev->flash_device.array_data  = flash;
+    rmm_snap_local(s, NULL);
+    RMM_SNAP_VAR(s, has);
+
+    cap = dev->abort_iocbs_fifo.capacity;
+    if (rmm_snap_restoring(s) && (cap != live_cap)) {
+        free(fdata);
+        fdata = cap ? calloc(1, cap) : NULL;
+    }
+    dev->abort_iocbs_fifo.data = fdata;
+
+    if (rmm_snap_restoring(s) && dbuf && (!has || (live_sz != dev->scsi_data_size))) {
+        free(dbuf);
+        dbuf = NULL;
+    }
+    if (rmm_snap_restoring(s) && has && !dbuf)
+        dbuf = calloc(1, dev->scsi_data_size ? dev->scsi_data_size : 1);
+    dev->scsi_data_buffer = dbuf;
+
+    rmm_snap_data(s);
+    rmm_snap_raw(s, flash, AM29_FLASH_SIZE);
+    if (fdata && cap)
+        rmm_snap_raw(s, fdata, cap);
+    if (has)
+        rmm_snap_raw(s, dbuf, dev->scsi_data_size);
+}
+#endif

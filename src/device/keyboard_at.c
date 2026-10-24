@@ -6330,3 +6330,21 @@ const device_t keyboard_at_generic_device = {
     .config        = keyboard_at_config
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the keyboard's queues, mode and set-3 key flags. */
+void
+keyboard_at_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(atkbc_dev_t));
+    RMM_SNAP_VAR(s, keyboard_set3_flags);
+    RMM_SNAP_VAR(s, keyboard_set3_all_repeat);
+    RMM_SNAP_VAR(s, keyboard_set3_all_break);
+    RMM_SNAP_VAR(s, keyboard_mode);
+    RMM_SNAP_VAR(s, inv_cmd_response);
+    RMM_SNAP_VAR(s, is_special);
+    RMM_SNAP_VAR(s, bat_counter);
+}
+#endif

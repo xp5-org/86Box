@@ -1617,3 +1617,26 @@ const device_t cmi8738_6ch_onboard_device = {
     .force_redraw  = NULL,
     .config        = cmi8x38_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole card struct; each DMA channel's host-stream pos/buffer are kept (releasenotes.txt). */
+void
+cmi8x38_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    cmi8x38_t *dev = (cmi8x38_t *) priv;
+    int        pos[2];
+    int32_t    buf[2][SOUNDBUFLEN * 2];
+
+    for (int i = 0; i < 2; i++) {
+        pos[i] = dev->dma[i].pos;
+        memcpy(buf[i], dev->dma[i].buffer, sizeof(buf[i]));
+    }
+    rmm_snap_raw(s, dev, sizeof(cmi8x38_t));
+    for (int i = 0; i < 2; i++) {
+        dev->dma[i].pos = pos[i];
+        memcpy(dev->dma[i].buffer, buf[i], sizeof(buf[i]));
+    }
+}
+#endif

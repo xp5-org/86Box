@@ -1589,3 +1589,28 @@ const device_t scat_sx_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+scat_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    scat_t *dev = (scat_t *) priv;
+    uint8_t save_low_mapping[sizeof(dev->low_mapping)];
+    uint8_t save_remap_mapping[sizeof(dev->remap_mapping)];
+    uint8_t save_efff_mapping[sizeof(dev->efff_mapping)];
+    uint8_t save_ems_mapping[sizeof(dev->ems_mapping)];
+
+    memcpy(save_low_mapping, &dev->low_mapping, sizeof(dev->low_mapping));
+    memcpy(save_remap_mapping, &dev->remap_mapping, sizeof(dev->remap_mapping));
+    memcpy(save_efff_mapping, &dev->efff_mapping, sizeof(dev->efff_mapping));
+    memcpy(save_ems_mapping, &dev->ems_mapping, sizeof(dev->ems_mapping));
+    rmm_snap_raw(s, dev, sizeof(scat_t));
+    memcpy(&dev->low_mapping, save_low_mapping, sizeof(dev->low_mapping));
+    memcpy(&dev->remap_mapping, save_remap_mapping, sizeof(dev->remap_mapping));
+    memcpy(&dev->efff_mapping, save_efff_mapping, sizeof(dev->efff_mapping));
+    memcpy(&dev->ems_mapping, save_ems_mapping, sizeof(dev->ems_mapping));
+}
+#endif

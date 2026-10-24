@@ -541,3 +541,26 @@ const device_t lpt_prt_text_device = {
     .config        = NULL
 #endif
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: handshake lines, head position and the character page. Port, name and output file stay live. */
+void
+prt_text_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    prnt_t     *dev  = (prnt_t *) priv;
+    prnt_t      keep = *dev;
+    psurface_t  pkeep = *dev->page;
+
+    rmm_snap_raw(s, dev, sizeof(prnt_t));
+    dev->name = keep.name;
+    dev->lpt  = keep.lpt;
+    memcpy(dev->filename, keep.filename, sizeof(dev->filename));
+    dev->page = keep.page;
+    rmm_snap_raw(s, dev->page, sizeof(psurface_t));
+    dev->page->chars = pkeep.chars;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->page->chars, (size_t) dev->page->w * dev->page->h);
+}
+#endif

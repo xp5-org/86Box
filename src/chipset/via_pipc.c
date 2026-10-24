@@ -1960,3 +1960,18 @@ const device_t via_vt8231_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct and its I/O traps. The IDE bus master, NVR, SMBus, ACPI, USB, AC'97, SB and SuperIO it adds are devices with their own visitors. */
+void
+via_pipc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    pipc_t *dev = (pipc_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(pipc_t));
+    for (int i = 0; i < TRAP_MAX; i++)
+        io_trap_rmm_snap(s, dev->io_traps[i].trap);
+}
+#endif

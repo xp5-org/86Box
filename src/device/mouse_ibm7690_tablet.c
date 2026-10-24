@@ -281,3 +281,14 @@ const device_t mouse_ibm7690_touch_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+mouse_ibm7690_tablet_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ibm7690_touch_t));
+}
+#endif

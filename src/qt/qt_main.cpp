@@ -57,6 +57,7 @@ extern "C" {
 #    include <86box/discord.h>
 #endif
 #include <86box/gdbstub.h>
+#include <86box/rmm.h>
 #include <86box/version.h>
 #include <86box/renderdefs.h>
 }
@@ -961,9 +962,12 @@ main(int argc, char *argv[])
 
         cpu_thread_running = true;
         main_thread        = new std::thread(main_thread_fn);
+
+        rmm_init();
     });
 
     const auto ret = app.exec();
+    rmm_close();
     cpu_thread_run = 0;
     main_thread->join();
     pc_close(nullptr);

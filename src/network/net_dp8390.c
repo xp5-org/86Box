@@ -1047,3 +1047,20 @@ const device_t dp8390_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the core's registers, then its on-chip packet memory. */
+void
+dp8390_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    dp8390_t *dev = (dp8390_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(dp8390_t));
+    if (dev->mem && dev->mem_size) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, dev->mem, dev->mem_size);
+    }
+}
+#endif

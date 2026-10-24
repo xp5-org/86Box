@@ -124,6 +124,7 @@ extern const device_t *gameport_get_device(int port);
 extern int         gameport_has_config(int port);
 extern const char *gameport_get_internal_name(int port);
 extern int         gameport_get_from_internal_name(const char *str);
+extern uint16_t    gameport_get_active_addr(void);
 
 #ifdef EMU_DEVICE_H
 extern const device_t gameport_device;

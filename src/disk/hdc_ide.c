@@ -4413,3 +4413,72 @@ const device_t ide_pci_ter_qua_2ch_device = {
     .short_name    = "PCI IDE",
     .ide_boards    = ide_boards_generic
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: each board and its two drive slots (ATAPI ZIP and MO are visited by their own cores). */
+const char *
+ide_rmm_snap_blocked(void)
+{
+    return NULL;
+}
+
+/* One board with its bus-master block and drive slots. */
+static void
+ide_rmm_snap_board(rmm_snap_t *s, ide_board_t *b)
+{
+    rmm_snap_raw(s, b, sizeof(ide_board_t));
+    if (b->bm)
+        rmm_snap_raw(s, b->bm, sizeof(ide_bm_t));
+    for (int d = 0; d < 2; d++) {
+        ide_t *ide = b->ide[d];
+
+        if (!ide)
+            continue;
+        rmm_snap_raw(s, ide, sizeof(ide_t));
+        if (ide->tf)
+            rmm_snap_raw(s, ide->tf, sizeof(ide_tf_t));
+        if (ide->buffer)
+            rmm_snap_raw(s, ide->buffer, 65536 * sizeof(uint16_t));
+        if (ide->sector_buffer)
+            rmm_snap_raw(s, ide->sector_buffer, 256 * 512);
+    }
+}
+
+void
+ide_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    const ide_unit_t *unit = (ide_unit_t *) priv;
+
+    for (int board = 0; board < IDE_BUS_MAX; board++) {
+        ide_board_t *b = ide_boards[board];
+
+        if (!(unit->boards & (1 << board)) || !b)
+            continue;
+        ide_rmm_snap_board(s, b);
+    }
+}
+
+/* Secondary to quaternary channel cards: private data is the board. */
+void
+ide_board_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ide_rmm_snap_board(s, (ide_board_t *) priv);
+}
+
+/* The PCI card channels device is private to this file: the unit it holds is ide_rmm_snap's. */
+rmm_snap_fn
+ide_rmm_snap_fn(const device_t *dev)
+{
+    return (dev == &ide_pci_boards_device) ? ide_rmm_snap : NULL;
+}
+#endif
+
+#ifdef USE_RMM
+void
+mcide_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(mcide_t));
+}
+#endif

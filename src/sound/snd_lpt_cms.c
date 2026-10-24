@@ -189,3 +189,25 @@ const device_t lpt_cms_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the port-side state and the cms_t it owns. The host-stream position and buffer are kept. */
+void
+snd_lpt_cms_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    cmslpt_t *dev  = (cmslpt_t *) priv;
+    cms_t *chip = dev->cms;
+    unsigned char pos0[sizeof(chip->pos)];
+    unsigned char buf0[sizeof(chip->buffer)];
+
+    memcpy(pos0, &chip->pos, sizeof(pos0));
+    memcpy(buf0, chip->buffer, sizeof(buf0));
+    rmm_snap_raw(s, dev, sizeof(cmslpt_t));
+    dev->cms = chip;
+    rmm_snap_raw(s, chip, sizeof(cms_t));
+    memcpy(&chip->pos, pos0, sizeof(pos0));
+    memcpy(chip->buffer, buf0, sizeof(buf0));
+}
+#endif

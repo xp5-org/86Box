@@ -2073,3 +2073,21 @@ const fm_drv_t nuked_opl3_drv_48k = {
     .priv          = NULL,
     .generate      = NULL,
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the Nuked chip, status and timer registers. pos and buffer are kept. */
+void
+nuked_opl3_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    nuked_opl3_drv_t *dev = (nuked_opl3_drv_t *) priv;
+    int               pos = dev->pos;
+    int32_t           buf[MUSICBUFLEN * 2];
+
+    memcpy(buf, dev->buffer, sizeof(buf));
+    rmm_snap_raw(s, dev, sizeof(nuked_opl3_drv_t));
+    dev->pos = pos;
+    memcpy(dev->buffer, buf, sizeof(buf));
+}
+#endif

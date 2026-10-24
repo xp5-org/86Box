@@ -1,3 +1,4 @@
+#ifndef RMM_SELF_INCLUDE /* once; see the end of the file */
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -32,6 +33,7 @@
 #include <86box/plat_fallthrough.h>
 #include <86box/plat_unused.h>
 #include <86box/gdbstub.h>
+#include <86box/rmm.h>
 #ifdef USE_DYNAREC
 #    include "codegen.h"
 #    include "codegen_backend.h"
@@ -1350,8 +1352,16 @@ inboard_post_fixups(void)
 
 }
 
-void
-exec386(int32_t cycs)
+#endif /* !RMM_SELF_INCLUDE */
+
+/* Compiled twice from this text: exec386, then exec386_rmm with a hook before each instruction. */
+#ifndef EXEC386_FN
+#    define EXEC386_FN      exec386
+#    define EXEC386_STORAGE
+#    define EXEC386_DEBUG   0
+#endif
+EXEC386_STORAGE void
+EXEC386_FN(int32_t cycs)
 {
     int      vector;
     int      tempi;
@@ -1372,6 +1382,11 @@ exec386(int32_t cycs)
         while (cycdiff < cycle_period) {
 #ifdef USE_DEBUG_REGS_486
             int ins_fetch_fault = 0;
+#endif
+#if defined(USE_RMM) && EXEC386_DEBUG
+            /* Before the fetch: cs + pc is the next instruction. */
+            if (rmm_cpu_instruction())
+                return;
 #endif
             ins_cycles = cycles;
 
@@ -1567,3 +1582,45 @@ block_ended:
         }
     }
 }
+
+#ifndef RMM_SELF_INCLUDE
+#    ifdef USE_RMM
+/* Second instantiation: exec386_rmm. */
+#        define RMM_SELF_INCLUDE
+#        undef  EXEC386_FN
+#        undef  EXEC386_STORAGE
+#        undef  EXEC386_DEBUG
+#        define EXEC386_FN      exec386_rmm_run
+#        define EXEC386_STORAGE static
+#        define EXEC386_DEBUG   1
+#        include __FILE__
+#        undef  RMM_SELF_INCLUDE
+
+/* Halted on a breakpoint: run nothing until the monitor pauses. */
+void
+exec386_rmm(int32_t cycs)
+{
+    if (!rmm_cpu_halted)
+        exec386_rmm_run(cycs);
+}
+#    endif
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: block bookkeeping that carries across exec386 calls. */
+void
+cpu386_dynarec_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, cpu_block_end);
+    RMM_SNAP_VAR(s, cpu_end_block_after_ins);
+#    ifdef USE_DYNAREC
+    RMM_SNAP_VAR(s, cycles_main);
+    RMM_SNAP_VAR(s, cycles_old);
+    RMM_SNAP_VAR(s, tsc_old);
+#        ifdef USE_ACYCS
+    RMM_SNAP_VAR(s, acycs);
+#        endif
+#    endif
+}
+#endif
+#endif /* !RMM_SELF_INCLUDE */

@@ -6728,3 +6728,23 @@ const device_t gd5480_pci_device = {
     .force_redraw  = gd54xx_force_redraw,
     .config        = gd5480_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: card, SVGA core and VRAM. All VRAM pages are marked changed on restore. */
+void
+gd54xx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    gd54xx_t *gd54xx = (gd54xx_t *) priv;
+    svga_t   *svga   = &gd54xx->svga;
+
+    rmm_snap_raw(s, gd54xx, sizeof(gd54xx_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, svga->vram, gd54xx->vram_size);
+    if (rmm_snap_restoring(s)) {
+        memset(svga->changedvram, changeframecount, (gd54xx->vram_size >> 12) + 1);
+        svga->fullchange = changeframecount;
+    }
+}
+#endif

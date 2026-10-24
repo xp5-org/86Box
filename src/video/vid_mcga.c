@@ -1394,3 +1394,20 @@ mcga_get_lcd_power(void *priv)
 
     return (dev != NULL) && dev->lcd && (dev->lcd_regs[0x0d] & 0x01);
 }
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: MCGA, 64 KB VRAM and 8 KB font RAM. The 7690 LCD buffers are not covered. */
+void
+mcga_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mcga_t  *dev  = (mcga_t *) priv;
+    uint8_t *vram = dev->vram;
+    uint8_t *font = dev->font_ram;
+
+    rmm_snap_raw(s, dev, sizeof(mcga_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, vram, MCGA_VRAM_SIZE);
+    rmm_snap_raw(s, font, MCGA_FONT_RAM_SIZE);
+}
+#endif

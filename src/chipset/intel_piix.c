@@ -1879,3 +1879,18 @@ const device_t slc90e66_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: southbridge registers and I/O traps. */
+void
+piix_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    piix_t *dev = (piix_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(piix_t));
+    for (int i = 0; i < (int) (sizeof(dev->io_traps) / sizeof(dev->io_traps[0])); i++)
+        io_trap_rmm_snap(s, dev->io_traps[i].trap);
+}
+#endif

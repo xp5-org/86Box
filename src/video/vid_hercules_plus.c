@@ -793,3 +793,19 @@ const device_t herculesplus_device = {
     .force_redraw  = NULL,
     .config        = herculesplus_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_hercules_plus_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    herculesplus_t *dev = (herculesplus_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(herculesplus_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x10000);
+}
+#endif

@@ -397,3 +397,22 @@ const fm_drv_t esfmu_opl_drv = {
     .priv          = NULL,
     .generate      = NULL,
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. The host-stream position and buffer are kept (releasenotes.txt). */
+void
+snd_opl_esfm_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    esfm_drv_t *dev = (esfm_drv_t *) priv;
+    unsigned char pos0[sizeof(dev->pos)];
+    unsigned char buf0[sizeof(dev->buffer)];
+
+    memcpy(pos0, &dev->pos, sizeof(pos0));
+    memcpy(buf0, dev->buffer, sizeof(buf0));
+    rmm_snap_raw(s, dev, sizeof(esfm_drv_t));
+    memcpy(&dev->pos, pos0, sizeof(pos0));
+    memcpy(dev->buffer, buf0, sizeof(buf0));
+}
+#endif

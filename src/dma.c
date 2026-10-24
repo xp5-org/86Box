@@ -3470,3 +3470,43 @@ dma_bm_write(uint32_t PhysAddress, const uint8_t *DataWrite, uint32_t TotalSize,
     if (dma_at)
         mem_invalidate_range(PhysAddress, PhysAddress + TotalSize - 1);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: both 8237s, page and extended registers, request state. */
+void
+dma_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, dma);
+    RMM_SNAP_VAR(s, dma_e);
+    RMM_SNAP_VAR(s, dma_m);
+    RMM_SNAP_VAR(s, dmaregs);
+    RMM_SNAP_VAR(s, dma_wp);
+    RMM_SNAP_VAR(s, dma_stat);
+    RMM_SNAP_VAR(s, dma_stat_rq);
+    RMM_SNAP_VAR(s, dma_stat_rq_pc);
+    RMM_SNAP_VAR(s, dma_sw_req);
+    RMM_SNAP_VAR(s, dma_stat_adv_pend);
+    RMM_SNAP_VAR(s, dma_command);
+    RMM_SNAP_VAR(s, dma_req_is_soft);
+    RMM_SNAP_VAR(s, dma_advanced);
+    RMM_SNAP_VAR(s, dma_at);
+    RMM_SNAP_VAR(s, dma_ibm5140);
+    RMM_SNAP_VAR(s, dma_ibm5140_diag);
+    RMM_SNAP_VAR(s, dma_sg_base);
+    RMM_SNAP_VAR(s, dma_sg_int);
+    RMM_SNAP_VAR(s, dma_sg_count_mask);
+    RMM_SNAP_VAR(s, dma_chain_mode);
+    RMM_SNAP_VAR(s, dma_chain_int);
+    RMM_SNAP_VAR(s, dma_stop);
+    RMM_SNAP_VAR(s, dma_stop_en);
+    RMM_SNAP_VAR(s, dma_eisa);
+    RMM_SNAP_VAR(s, dma_mask);
+    RMM_SNAP_VAR(s, dma_ps2);
+    RMM_SNAP_VAR(s, dma_xt8237);
+    RMM_SNAP_VAR(s, dma_xt_refresh_queued);
+    RMM_SNAP_VAR(s, dma_xt_refresh_scheduled);
+    RMM_SNAP_VAR(s, dma_force_xt);
+}
+#endif

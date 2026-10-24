@@ -165,3 +165,25 @@ const device_t lpt_tnd_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the port-side state and the sn76489_t it owns. The host-stream position and buffer are kept. */
+void
+snd_lpt_tndlpt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    tndlpt_t *dev  = (tndlpt_t *) priv;
+    sn76489_t *chip = dev->sn76489;
+    unsigned char pos0[sizeof(chip->pos)];
+    unsigned char buf0[sizeof(chip->buffer)];
+
+    memcpy(pos0, &chip->pos, sizeof(pos0));
+    memcpy(buf0, chip->buffer, sizeof(buf0));
+    rmm_snap_raw(s, dev, sizeof(tndlpt_t));
+    dev->sn76489 = chip;
+    rmm_snap_raw(s, chip, sizeof(sn76489_t));
+    memcpy(&chip->pos, pos0, sizeof(pos0));
+    memcpy(chip->buffer, buf0, sizeof(buf0));
+}
+#endif

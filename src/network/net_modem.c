@@ -161,6 +161,11 @@ typedef struct modem_t {
     netcard_t *card;
 } modem_t;
 
+#ifdef USE_RMM
+/* The modem the machine holds, for the snapshot check. */
+static modem_t *rmm_modem;
+#endif
+
 #define MREG_AUTOANSWER_COUNT 0
 #define MREG_RING_COUNT       1
 #define MREG_ESCAPE_CHAR      2
@@ -1500,6 +1505,9 @@ modem_init(UNUSED(const device_t *info))
     modem->telnet_mode = device_get_config_int("telnet_mode");
 
     modem->clientsocket = modem->serversocket = modem->waitingclientsocket = -1;
+#ifdef USE_RMM
+    rmm_modem = modem;
+#endif
 
     fifo8_create(&modem->data_pending, 0x40000);
     fifo8_create(&modem->rx_data, 0x40000);
@@ -1521,10 +1529,54 @@ modem_init(UNUSED(const device_t *info))
     return modem;
 }
 
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the command state, S-registers, serial buffers and both FIFOs. The sockets
+   are the host's and stay as they are, so a snapshot is refused while a peer is connected. */
+void
+modem_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    modem_t   *modem    = (modem_t *) priv;
+    serial_t  *serial   = modem->serial;
+    netcard_t *card     = modem->card;
+    SOCKET     server   = modem->serversocket;
+    SOCKET     client   = modem->clientsocket;
+    SOCKET     waiting  = modem->waitingclientsocket;
+    uint8_t   *rx_data  = modem->rx_data.data;
+    uint8_t   *pending  = modem->data_pending.data;
+
+    rmm_snap_raw(s, modem, sizeof(modem_t));
+    modem->serial               = serial;
+    modem->card                 = card;
+    modem->serversocket         = server;
+    modem->clientsocket         = client;
+    modem->waitingclientsocket  = waiting;
+    modem->rx_data.data         = rx_data;
+    modem->data_pending.data    = pending;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, rx_data, modem->rx_data.capacity);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, pending, modem->data_pending.capacity);
+}
+
+const char *
+modem_rmm_snap_blocked(void)
+{
+    if (rmm_modem && (rmm_modem->connected || rmm_modem->ringing || rmm_modem->tcpIpConnInProgress
+                      || (rmm_modem->clientsocket != -1) || (rmm_modem->waitingclientsocket != -1)))
+        return "the modem has a call or a connection up (the peer is a host socket that cannot be rewound)";
+    return NULL;
+}
+#endif
+
 void
 modem_close(void *priv)
 {
     modem_t *modem     = (modem_t *) priv;
+#ifdef USE_RMM
+    rmm_modem = NULL;
+#endif
     modem->listen_port = 0;
     modem_reset(modem);
     fifo8_destroy(&modem->data_pending);

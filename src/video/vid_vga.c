@@ -351,3 +351,23 @@ const device_t ps1vga_mca_device = {
     .force_redraw  = vga_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: card, SVGA core and 256 KB VRAM. */
+void
+vga_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    vga_t  *vga  = (vga_t *) priv;
+    svga_t *svga = &vga->svga;
+
+    rmm_snap_raw(s, vga, sizeof(vga_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, svga->vram, svga->vram_max);
+    if (rmm_snap_restoring(s)) {
+        memset(svga->changedvram, changeframecount, (svga->vram_max >> 12) + 1);
+        svga->fullchange = changeframecount;
+    }
+}
+#endif

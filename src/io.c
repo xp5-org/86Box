@@ -923,3 +923,66 @@ io_trap_remove(void *handle)
 
     free(trap);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: every port's handler chain, saved as data and rebuilt on restore. */
+void
+io_rmm_snap(rmm_snap_t *s)
+{
+    uint32_t used = 0;
+    uint32_t port;
+    uint16_t n;
+    io_t    *p;
+    io_t     e;
+
+    if (!rmm_snap_restoring(s)) {
+        for (port = 0; port < NPORTS; port++)
+            used += !!io[port];
+        RMM_SNAP_VAR(s, used);
+        for (port = 0; port < NPORTS; port++) {
+            if (!io[port])
+                continue;
+            n = 0;
+            for (p = io[port]; p; p = p->next)
+                n++;
+            RMM_SNAP_VAR(s, port);
+            RMM_SNAP_VAR(s, n);
+            for (p = io[port]; p; p = p->next) {
+                e      = *p;
+                e.prev = e.next = NULL;
+                rmm_snap_local(s, NULL); /* the restore reads these into e */
+                RMM_SNAP_VAR(s, e);
+            }
+        }
+        return;
+    }
+
+    io_init(); /* frees every chain */
+    RMM_SNAP_VAR(s, used);
+    for (uint32_t i = 0; i < used; i++) {
+        port = NPORTS; /* a short buffer leaves these, and stops the loop */
+        n    = 0;
+        RMM_SNAP_VAR(s, port);
+        RMM_SNAP_VAR(s, n);
+        if (port >= NPORTS)
+            return;
+        for (uint16_t j = 0; j < n; j++) {
+            rmm_snap_local(s, NULL);
+            RMM_SNAP_VAR(s, e);
+            io_sethandler_common((uint16_t) port, 1, e.inb, e.inw, e.inl, e.outb, e.outw, e.outl, e.priv, 1);
+        }
+    }
+}
+#endif
+
+#ifdef USE_RMM
+/* For devices that own an I/O trap: its enable/base/size. */
+void
+io_trap_rmm_snap(rmm_snap_t *s, void *trap)
+{
+    if (trap)
+        rmm_snap_raw(s, trap, sizeof(io_trap_t));
+}
+#endif

@@ -218,3 +218,20 @@ const device_t fdc_monster_device = {
     .force_redraw  = NULL,
     .config        = monster_fdc_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card struct and BIOS image. */
+void
+monster_fdc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    monster_fdc_t *dev = (monster_fdc_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(*dev));
+    if (dev->bios_rom.rom) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, dev->bios_rom.rom, 0x2000);
+    }
+}
+#endif

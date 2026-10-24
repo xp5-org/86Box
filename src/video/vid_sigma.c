@@ -927,3 +927,19 @@ const device_t sigma_device = {
     .force_redraw  = NULL,
     .config        = sigma_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_sigma_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sigma_t *dev = (sigma_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(sigma_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 4 * 0x8000);
+}
+#endif

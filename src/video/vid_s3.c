@@ -13315,3 +13315,17 @@ const device_t s3_trio64v2dx_pci_device = {
     .force_redraw  = s3_force_redraw,
     .config        = s3_trio64v2dx_pci_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_s3_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    s3_t *dev = (s3_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(s3_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

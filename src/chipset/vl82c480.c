@@ -425,3 +425,25 @@ const device_t vl82c486_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct (the cache window stays live) and the cache SRAM by value. */
+void
+vl82c480_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    vl82c480_t   *dev  = (vl82c480_t *) priv;
+    uint8_t      *sram = dev->sram;
+    mem_mapping_t map;
+
+    memcpy(&map, &dev->sram_mapping, sizeof(map));
+    rmm_snap_raw(s, dev, sizeof(vl82c480_t));
+    memcpy(&dev->sram_mapping, &map, sizeof(map));
+    dev->sram = sram;
+    if (sram && dev->sram_size) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, sram, dev->sram_size);
+    }
+}
+#endif

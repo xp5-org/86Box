@@ -452,3 +452,17 @@ const device_t realtek_rtg3106_device = {
     .force_redraw  = rtg_force_redraw,
     .config        = rtg3106_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_rtg310x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rtg_t *dev = (rtg_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(rtg_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

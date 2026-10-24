@@ -267,3 +267,14 @@ const device_t ide_ali5213_device = {
     .short_name    = "ALi M5213",
     .ide_boards    = ide_boards_pri_sec
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_ide_ali5213_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ali5213_t));
+}
+#endif

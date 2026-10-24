@@ -1033,3 +1033,16 @@ const device_t kbc_xtclone_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: controller and key queue. XT 86 and XT clone controllers only. */
+void
+kbc_xt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(xtkbd_t));
+    RMM_SNAP_VAR(s, key_queue);
+    RMM_SNAP_VAR(s, key_queue_start);
+    RMM_SNAP_VAR(s, key_queue_end);
+}
+#endif

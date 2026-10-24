@@ -268,3 +268,14 @@ const device_t phoenix_486_jumper_pb430_device = {
     .config        = NULL
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+phoenix_486_jumper_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(phoenix_486_jumper_t));
+}
+#endif

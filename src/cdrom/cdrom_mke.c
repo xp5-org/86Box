@@ -2206,3 +2206,42 @@ const device_t teac_cdrom_16bit_device = {
     .close         = mke_close,
     .config        = teac_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* One drive channel: state and sector buffers. FIFO contents are saved separately. */
+static void
+mke_rmm_snap_one(rmm_snap_t *s, mke_t *m)
+{
+    uint8_t *b    = (uint8_t *) m;
+    size_t   cb0  = offsetof(mke_t, cdbuffer);
+    size_t   cb1  = cb0 + sizeof(m->cdbuffer);
+    size_t   tmp0 = offsetof(mke_t, temp_buf);
+    size_t   tmp1 = tmp0 + sizeof(m->temp_buf);
+
+    rmm_snap_raw(s, b, cb0);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, m->cdbuffer, sizeof(m->cdbuffer));
+    rmm_snap_raw(s, b + cb1, tmp0 - cb1);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, m->temp_buf, sizeof(m->temp_buf));
+    rmm_snap_raw(s, b + tmp1, sizeof(mke_t) - tmp1);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, m->data_fifo.data, m->data_fifo.capacity);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, m->info_fifo.data, m->info_fifo.capacity);
+}
+
+/* Monitor snapshots: interface latches and each present drive channel. */
+void
+mke_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mke_interface_t *mki = (mke_interface_t *) priv;
+
+    for (int i = 0; i < 4; i++)
+        if (mki->mke[i].present)
+            mke_rmm_snap_one(s, &mki->mke[i]);
+    rmm_snap_raw(s, &mki->is_sb, sizeof(*mki) - offsetof(mke_interface_t, is_sb));
+}
+#endif

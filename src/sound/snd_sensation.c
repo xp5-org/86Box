@@ -1265,3 +1265,28 @@ const device_t sensationaud_device = {
     .force_redraw  = NULL,
     .config        = sensation_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card. The host-stream positions and buffers are kept. */
+void
+snd_sensation_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sensation_t *dev = (sensation_t *) priv;
+    unsigned char pos[sizeof(dev->pos)];
+    unsigned char vpos[sizeof(dev->visdac_pos)];
+    unsigned char mma[sizeof(dev->mma_buffer)];
+    unsigned char vis[sizeof(dev->visdac_buffer)];
+
+    memcpy(pos, &dev->pos, sizeof(pos));
+    memcpy(vpos, &dev->visdac_pos, sizeof(vpos));
+    memcpy(mma, dev->mma_buffer, sizeof(mma));
+    memcpy(vis, dev->visdac_buffer, sizeof(vis));
+    rmm_snap_raw(s, dev, sizeof(sensation_t));
+    memcpy(&dev->pos, pos, sizeof(pos));
+    memcpy(&dev->visdac_pos, vpos, sizeof(vpos));
+    memcpy(dev->mma_buffer, mma, sizeof(mma));
+    memcpy(dev->visdac_buffer, vis, sizeof(vis));
+}
+#endif

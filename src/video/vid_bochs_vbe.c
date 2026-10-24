@@ -975,3 +975,17 @@ const device_t bochs_svga_device = {
     .force_redraw  = bochs_vbe_force_redraw,
     .config        = bochs_vbe_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_bochs_vbe_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    bochs_vbe_t *dev = (bochs_vbe_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(bochs_vbe_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

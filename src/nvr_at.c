@@ -1287,3 +1287,19 @@ const device_t nvr_at_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: registers, the AT RTC's private state and lock bits. */
+void
+nvr_at_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    nvr_t   *nvr   = (nvr_t *) priv;
+    local_t *local = (local_t *) nvr->data;
+
+    rmm_snap_raw(s, nvr, sizeof(nvr_t));
+    rmm_snap_raw(s, local, sizeof(local_t));
+    rmm_snap_raw(s, local->lock, nvr->size);
+}
+#endif

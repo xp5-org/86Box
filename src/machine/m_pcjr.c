@@ -944,3 +944,18 @@ machine_pcjr_init(UNUSED(const machine_t *model))
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the video controller, keyboard controller and option flags in one struct, and the key
+   queue in globals. The video RAM is the machine's own RAM. */
+void
+pcjr_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(pcjr_t));
+    RMM_SNAP_VAR(s, key_queue);
+    RMM_SNAP_VAR(s, key_queue_start);
+    RMM_SNAP_VAR(s, key_queue_end);
+}
+#endif

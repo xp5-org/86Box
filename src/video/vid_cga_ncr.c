@@ -680,3 +680,21 @@ const device_t nga_device = {
     .force_redraw  = NULL,
     .config        = nga_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_ncr_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    nga_t *dev = (nga_t *) priv;
+    uint8_t *b0 = dev->cga.vram;
+    uint8_t *b1 = dev->vram_64k;
+
+    rmm_snap_raw(s, dev, sizeof(nga_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x8000);
+    rmm_snap_raw(s, b1, 0x8000);
+}
+#endif

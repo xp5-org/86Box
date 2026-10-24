@@ -2809,3 +2809,41 @@ const device_t ncr53c875_onboard_pci_device = {
     .config        = NULL,
     .short_name    = "NCR 53c875"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole chip. The running request is saved by value and re-pointed. */
+void
+ncr53c8xx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ncr53c8xx_t       *dev     = (ncr53c8xx_t *) priv;
+    void              *i2c     = dev->i2c;
+    void              *eeprom  = dev->eeprom;
+    ncr53c8xx_request *cur     = dev->current;
+    ncr53c8xx_request  req;
+    uint8_t            flags   = 0;
+
+    memset(&req, 0, sizeof(req));
+    if (!rmm_snap_restoring(s) && cur) {
+        flags = 1 | ((dev->hba_private == (void *) cur) ? 2 : 0);
+        req   = *cur;
+    }
+    rmm_snap_raw(s, dev, sizeof(*dev));
+    rmm_snap_raw(s, &flags, sizeof(flags));
+    rmm_snap_raw(s, &req, sizeof(req));
+    if (rmm_snap_restoring(s)) {
+        dev->i2c    = i2c;
+        dev->eeprom = eeprom;
+        if (flags & 1) {
+            if (cur == NULL)
+                cur = (ncr53c8xx_request *) calloc(1, sizeof(ncr53c8xx_request));
+            *cur         = req;
+            cur->dma_buf = NULL;
+        } else
+            cur = NULL;
+        dev->current     = cur;
+        dev->hba_private = (flags & 2) ? (void *) cur : NULL;
+    }
+}
+#endif

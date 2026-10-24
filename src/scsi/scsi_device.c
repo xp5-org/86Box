@@ -519,3 +519,21 @@ scsi_bus_update(scsi_bus_t *scsi_bus, int bus)
     scsi_bus->bus_in = bus;
 }
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the per-target transfer state (the rest is set at attach time). */
+void
+scsi_device_rmm_snap(rmm_snap_t *s)
+{
+    for (int i = 0; i < SCSI_BUS_MAX; i++)
+        for (int j = 0; j < SCSI_ID_MAX; j++) {
+            scsi_device_t *d = &scsi_devices[i][j];
+
+            RMM_SNAP_VAR(s, d->buffer_length);
+            RMM_SNAP_VAR(s, d->status);
+            RMM_SNAP_VAR(s, d->phase);
+        }
+}
+#endif

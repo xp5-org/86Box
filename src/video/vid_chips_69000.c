@@ -2944,3 +2944,17 @@ const device_t chips_69000_onboard_device = {
     .force_redraw  = chips_69000_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_chips_69000_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    chips_69000_t *dev = (chips_69000_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(chips_69000_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

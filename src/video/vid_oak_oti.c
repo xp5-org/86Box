@@ -853,3 +853,17 @@ const device_t oti077_pb400_device = {
     .force_redraw  = oti_force_redraw,
     .config        = oti077_acer100t_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_oak_oti_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    oti_t *dev = (oti_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(oti_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

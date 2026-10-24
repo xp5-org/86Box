@@ -185,3 +185,16 @@ const device_t adlib_mca_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. The host-stream position and buffer are kept (releasenotes.txt). */
+void
+snd_adlib_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    adlib_t *dev = (adlib_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(adlib_t));
+}
+#endif

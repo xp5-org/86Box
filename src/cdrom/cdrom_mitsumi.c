@@ -1622,3 +1622,27 @@ const device_t mitsumi_cdrom_vis_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: card state and the two 64 KB buffers. */
+void
+mitsumi_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mcd_t  *mcd  = (mcd_t *) priv;
+    uint8_t *b   = (uint8_t *) mcd;
+    size_t  buf0 = offsetof(mcd_t, buf);
+    size_t  buf1 = buf0 + sizeof(mcd->buf);
+    size_t  tmp0 = offsetof(mcd_t, temp_buf);
+    size_t  tmp1 = tmp0 + sizeof(mcd->temp_buf);
+
+    rmm_snap_raw(s, b, buf0);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, mcd->buf, sizeof(mcd->buf));
+    rmm_snap_raw(s, b + buf1, tmp0 - buf1);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, mcd->temp_buf, sizeof(mcd->temp_buf));
+    rmm_snap_raw(s, b + tmp1, sizeof(mcd_t) - tmp1);
+}
+#endif

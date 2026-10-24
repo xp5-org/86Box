@@ -1439,3 +1439,16 @@ const device_t cs4238b_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded AD1848 core. The host-stream position and buffer are kept. */
+void
+snd_cs423x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    cs423x_t *dev = (cs423x_t *) priv;
+
+    ad1848_rmm_snap_embedded(s, &dev->ad1848, dev, sizeof(cs423x_t));
+}
+#endif

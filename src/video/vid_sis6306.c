@@ -5889,3 +5889,17 @@ const device_t sis6306_onboard_device = {
     .force_redraw  = sis6306_force_redraw,
     .config        = sis6306_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_sis6306_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sis6306_t *dev = (sis6306_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(sis6306_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

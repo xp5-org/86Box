@@ -259,3 +259,14 @@ cm100_snapshot(const cm100_drive_t *d, cm100_snapshot_t *out)
     out->locked = d->locked;
     out->data_active = d->motion == CM100_READING;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: drive core and sector buffers. */
+void
+cm100_rmm_snap(rmm_snap_t *s, cm100_drive_t *d)
+{
+    rmm_snap_raw(s, d, sizeof(*d));
+}
+#endif

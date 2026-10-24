@@ -670,3 +670,17 @@ const device_t tvga9000b_device = {
     .force_redraw  = tvga_force_redraw,
     .config        = tvga9000b_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_tvga_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    tvga_t *dev = (tvga_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(tvga_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

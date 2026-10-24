@@ -3437,3 +3437,18 @@ const device_t rtl8139c_plus_device = {
     .force_redraw  = NULL,
     .config        = rtl8139c_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. The non-persistent C+ transmit buffer pointer stays as it is. */
+void
+net_rtl8139_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    RTL8139State *dev = (RTL8139State *) priv;
+    uint8_t      *txb = dev->cplus_txbuffer;
+
+    rmm_snap_raw(s, dev, sizeof(RTL8139State));
+    dev->cplus_txbuffer = txb;
+}
+#endif

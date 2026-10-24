@@ -692,3 +692,17 @@ const device_t nmc93cxx_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the serial EEPROM, its shift-register state and image. */
+void
+nmc93cxx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    nmc93cxx_eeprom_t *dev    = (nmc93cxx_eeprom_t *) priv;
+    uint16_t           nwords = (dev->data_bits == 16) ? dev->cells : (dev->cells / 2);
+
+    rmm_snap_raw(s, dev, offsetof(nmc93cxx_eeprom_t, array_data[nwords]));
+}
+#endif

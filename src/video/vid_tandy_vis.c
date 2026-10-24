@@ -538,3 +538,17 @@ const device_t tvis_vid_device = {
     .force_redraw  = tvis_vid_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_tandy_vis_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    tvis_vid_t *dev = (tvis_vid_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(tvis_vid_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

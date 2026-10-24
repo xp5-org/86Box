@@ -7167,3 +7167,17 @@ const device_t productiva_g100_device = {
     .config        = g100_config
 };
 #endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_mga_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mystique_t *dev = (mystique_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(mystique_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

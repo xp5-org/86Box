@@ -831,3 +831,19 @@ const device_t genius_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_genius_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    genius_t *dev = (genius_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(genius_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x28000);
+}
+#endif

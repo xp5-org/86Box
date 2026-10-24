@@ -1320,6 +1320,70 @@ rage128_cce_retire_release(rage128_t *dev)
     }
 }
 
+/* The pop failed because the snapshot drain aborted a packet: keep the part still
+   to come. CCE thread. See releasenotes.txt. */
+static void
+rage128_cce_keep_rest(rage128_t *dev, uint32_t hdr, uint32_t done)
+{
+    uint32_t n = 0;
+
+    if (!atomic_load(&dev->cce_snap_keep) || !atomic_load(&dev->cce_abort))
+        return;
+    switch (RAGE128_PM4_TYPE(hdr)) {
+        case 0:
+            {
+                uint32_t rest = RAGE128_PM4_COUNT(hdr) - done;
+                uint32_t idx  = (hdr & 0x8000) ? (hdr & 0x7ff) : ((hdr & 0x7ff) + done);
+
+                if (idx > 0x7ff)
+                    return;
+                dev->cce_resume[n++] = (hdr & ~(0x3fffu << 16) & ~0x7ffu) | ((rest - 1) << 16) | idx;
+                break;
+            }
+        case 1:
+            if (done == 0)
+                dev->cce_resume[n++] = hdr;
+            else
+                dev->cce_resume[n++] = (hdr >> 11) & 0x7ff; /* type 0, one register: the second */
+            break;
+        case 3:
+            if (done > RAGE128_PM4_MAX_PAYLOAD)
+                return;
+            dev->cce_resume[n++] = hdr;
+            for (uint32_t i = 0; i < done; i++)
+                dev->cce_resume[n++] = dev->cce_pl[i];
+            break;
+        default:
+            return;
+    }
+    dev->cce_resume_n = n;
+}
+
+/* Queue the kept rest of an aborted packet at the FIFO head. CPU thread, executor idle. */
+void
+rage128_pm4_resume_requeue(rage128_t *dev)
+{
+    uint32_t n = dev->cce_resume_n;
+    uint32_t wr;
+
+    dev->cce_resume_n = 0;
+    if (!n || !dev->cce_thread)
+        return;
+    wr = atomic_load(&dev->cce_fifo_wr);
+    rage128_cce_fifo_reserve(dev, wr, n);
+    if (rage128_cce_fifo_space(dev, wr) < n) {
+        pclog("[r128 pm4] snapshot: part-packet (%u dwords) dropped: CCE FIFO full\n", n);
+        return;
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        dev->cce_fifo[(wr + i) & RAGE128_CCE_FIFO_MASK]      = dev->cce_resume[i];
+        dev->cce_fifo_rptr[(wr + i) & RAGE128_CCE_FIFO_MASK] = 0xffffffffu;
+        dev->cce_fifo_tag[(wr + i) & RAGE128_CCE_FIFO_MASK]  = 0;
+    }
+    atomic_store(&dev->cce_fifo_wr, wr + n);
+    thread_set_event(dev->cce_wake_event);
+}
+
 /* Execute one packet whose header has been popped. */
 static void
 rage128_cce_packet(rage128_t *dev, uint32_t hdr)
@@ -1336,8 +1400,10 @@ rage128_cce_packet(rage128_t *dev, uint32_t hdr)
                 for (uint32_t i = 0; i < count; i++) {
                     uint32_t v;
 
-                    if (!rage128_cce_get(dev, &v))
+                    if (!rage128_cce_get(dev, &v)) {
+                        rage128_cce_keep_rest(dev, hdr, i);
                         return;
+                    }
                     /* ONE_REG_WR, header bit 15: every body dword goes to the
                        same register instead of to consecutive ones (SDK:
                        Type-0 CCE Packet, p. F-3 / PDF 293). The Windows 98 2D
@@ -1365,8 +1431,10 @@ rage128_cce_packet(rage128_t *dev, uint32_t hdr)
                 uint32_t treg = i ? RAGE128_PM4_T1_REG1(hdr)
                                   : RAGE128_PM4_T1_REG0(hdr);
 
-                if (!rage128_cce_get(dev, &v))
+                if (!rage128_cce_get(dev, &v)) {
+                    rage128_cce_keep_rest(dev, hdr, i);
                     return;
+                }
                 /* The same refusal as in the type-0 case. Each 11-bit
                    index reaches byte offset 0x1ffc, so a stray type-1
                    header can name the ring registers directly. Captured
@@ -1390,8 +1458,10 @@ rage128_cce_packet(rage128_t *dev, uint32_t hdr)
                 for (uint32_t i = 0; i < count; i++) {
                     uint32_t v;
 
-                    if (!rage128_cce_get(dev, &v))
+                    if (!rage128_cce_get(dev, &v)) {
+                        rage128_cce_keep_rest(dev, hdr, i);
                         return;
+                    }
                     if (i < n)
                         pl[i] = v;
                 }
@@ -1597,6 +1667,8 @@ rage128_pm4_thread_init(rage128_t *dev)
     atomic_store(&dev->cce_starved, 0);
     atomic_store(&dev->cce_hung, 0);
     atomic_store(&dev->gui_idle_event, 0);
+    atomic_store(&dev->cce_snap_keep, 0);
+    dev->cce_resume_n = 0;
     dev->pace_wall_ms_last = 0;
     /* Command-stream capture for offline replay: one file for the whole
        session, opened before any packet can flow, so no dump of the

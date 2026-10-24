@@ -3343,3 +3343,19 @@ const device_t pcnet_am79c973_onboard_device = {
     .force_redraw  = NULL,
     .config        = pcnet_pci_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+net_pcnet_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    nic_t *dev = (nic_t *) priv;
+    uint8_t save_mmio_mapping[sizeof(dev->mmio_mapping)];
+
+    memcpy(save_mmio_mapping, &dev->mmio_mapping, sizeof(dev->mmio_mapping));
+    rmm_snap_raw(s, dev, sizeof(nic_t));
+    memcpy(&dev->mmio_mapping, save_mmio_mapping, sizeof(dev->mmio_mapping));
+}
+#endif

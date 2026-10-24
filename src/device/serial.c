@@ -1348,3 +1348,24 @@ const device_t ns16950_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: UART and both FIFOs. */
+void
+serial_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    serial_t *dev = (serial_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(serial_t));
+    if (dev->rcvr_fifo)
+        rmm_snap_raw(s, dev->rcvr_fifo, sizeof(fifo64_t));
+    if (dev->xmit_fifo)
+        rmm_snap_raw(s, dev->xmit_fifo, sizeof(fifo64_t));
+    if (dev->sd) {
+        RMM_SNAP_VAR(s, com_ports[dev->inst]);
+        RMM_SNAP_VAR(s, serial_devices[dev->inst]);
+    }
+}
+#endif

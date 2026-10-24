@@ -1764,3 +1764,13 @@ const device_t esdi_ps2_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_esdi_mca_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(esdi_t));
+}
+#endif

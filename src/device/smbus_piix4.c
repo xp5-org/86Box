@@ -410,3 +410,14 @@ const device_t via_smbus_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the controller. */
+void
+smbus_piix4_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(smbus_piix4_t));
+}
+#endif

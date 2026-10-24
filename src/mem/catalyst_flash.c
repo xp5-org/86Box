@@ -300,3 +300,22 @@ const device_t amd_am28f010_flash_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: command state and the 128 KB array. The mappings stay live. */
+void
+catalyst_flash_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    flash_t *dev  = (flash_t *) priv;
+    flash_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(flash_t));
+    dev->array   = keep.array;
+    dev->mapping = keep.mapping;
+    memcpy(dev->mapping_h, keep.mapping_h, sizeof(dev->mapping_h));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->array, 0x20000);
+}
+#endif

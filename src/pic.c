@@ -1174,3 +1174,30 @@ picinterrupt(void)
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: both 8259s and the latch/ELCR/SMI state around them. */
+void
+pic_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, pic);
+    RMM_SNAP_VAR(s, pic2);
+    RMM_SNAP_VAR(s, pic_timer);
+    RMM_SNAP_VAR(s, shadow);
+    RMM_SNAP_VAR(s, elcr_enabled);
+    RMM_SNAP_VAR(s, tmr_inited);
+    RMM_SNAP_VAR(s, force_xt_imr_timing);
+    RMM_SNAP_VAR(s, pic_pci);
+    RMM_SNAP_VAR(s, kbd_latch);
+    RMM_SNAP_VAR(s, mouse_latch);
+    RMM_SNAP_VAR(s, ibm5140_diag_value);
+    RMM_SNAP_VAR(s, ibm5140_diag_enabled);
+    RMM_SNAP_VAR(s, ibm5140_diag_lines);
+    RMM_SNAP_VAR(s, smi_irq_mask);
+    RMM_SNAP_VAR(s, smi_irq_status);
+    RMM_SNAP_VAR(s, latched_irqs);
+    RMM_SNAP_VAR(s, irq_vector_override);
+}
+#endif

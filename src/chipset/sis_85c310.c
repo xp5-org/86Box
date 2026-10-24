@@ -150,3 +150,14 @@ const device_t rabbit_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: index and registers. Shadow RAM is in the memory visitor. */
+void
+rabbit_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(rabbit_t));
+}
+#endif

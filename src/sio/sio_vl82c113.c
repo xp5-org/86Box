@@ -170,3 +170,14 @@ const device_t vl82c113_device = {
     .config        = NULL
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+sio_vl82c113_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(vl82c113_t));
+}
+#endif

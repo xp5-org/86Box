@@ -2282,3 +2282,14 @@ const device_t i440zx_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: northbridge registers. */
+void
+i4x0_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(i4x0_t));
+}
+#endif

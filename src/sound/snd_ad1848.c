@@ -1515,3 +1515,26 @@ ad1848_init(ad1848_t *ad1848, uint8_t type)
     if ((ad1848->type >= AD1848_TYPE_CS4231) && (ad1848->type < AD1848_TYPE_CS4235))
         timer_add(&ad1848->cs4231a_irq_timer, cs4231a_irq_poll, ad1848, 0);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots, for a card struct that embeds an ad1848_t: copies the whole card struct,
+   keeping this chip's host-stream position and buffer (releasenotes.txt), then saves the playback FIFO.
+   The FIFO object itself stays where it is. */
+void
+ad1848_rmm_snap_embedded(rmm_snap_t *s, ad1848_t *a, void *card, size_t card_size)
+{
+    int      pos  = a->pos;
+    void    *fifo = a->play_fifo;
+    int16_t  buf[SOUNDBUFLEN * 2];
+
+    memcpy(buf, a->buffer, sizeof(buf));
+    rmm_snap_raw(s, card, card_size);
+    a->pos        = pos;
+    a->play_fifo  = fifo;
+    memcpy(a->buffer, buf, sizeof(buf));
+    if (fifo)
+        rmm_snap_raw(s, fifo, sizeof(fifo16_t));
+}
+#endif

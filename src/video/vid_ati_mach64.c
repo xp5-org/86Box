@@ -4325,3 +4325,17 @@ const device_t mach64vt3_onboard_device = {
     .force_redraw  = mach64_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_ati_mach64_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mach64_t *dev = (mach64_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(mach64_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

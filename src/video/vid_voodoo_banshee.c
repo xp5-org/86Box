@@ -4469,3 +4469,20 @@ const device_t velocity_200_agp_device = {
     .force_redraw  = banshee_force_redraw,
     .config        = voodoo_nomem_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_voodoo_banshee_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    banshee_t *dev     = (banshee_t *) priv;
+    voodoo_t  *voodoo  = dev->voodoo;
+
+    rmm_snap_raw(s, dev, sizeof(banshee_t));
+    dev->voodoo = voodoo;
+    svga_rmm_snap_vram(s, &dev->svga);
+    voodoo_card_rmm_snap(s, voodoo);
+}
+#endif

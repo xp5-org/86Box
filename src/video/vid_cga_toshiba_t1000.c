@@ -760,3 +760,19 @@ const device_t t1200_video_device = {
     .force_redraw  = NULL,
     .config        = t1000_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_toshiba_t1000_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    t1000_t *dev = (t1000_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(t1000_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x4000);
+}
+#endif

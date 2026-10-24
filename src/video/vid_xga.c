@@ -4031,3 +4031,38 @@ xga_device_add(void)
     if (machine_has_bus(machine, MACHINE_BUS_MCA))
         device_add(&xga_device);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the XGA add-on of the primary VGA. priv is that card's svga, which its own visitor saves; this saves the xga_t and its VRAM. */
+void
+xga_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    svga_t *svga = (svga_t *) priv;
+    xga_t  *xga;
+
+    if (!svga || !svga->xga)
+        return;
+    xga = svga->xga;
+    rmm_snap_raw(s, xga, sizeof(xga_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, xga->vram, xga->vram_size);
+    if (rmm_snap_restoring(s))
+        memset(xga->changedvram, changeframecount, (xga->vram_size >> 12) + 1);
+}
+#endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the standalone INMOS XGA-compatible VGA, an svga_t and its VRAM. */
+void
+svga_xga_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    svga_t *svga = (svga_t *) priv;
+
+    rmm_snap_raw(s, svga, sizeof(svga_t));
+    svga_rmm_snap_vram(s, svga);
+}
+#endif

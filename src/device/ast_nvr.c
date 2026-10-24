@@ -178,3 +178,26 @@ const device_t ast_nvr_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: bank and index, and the NVR RAM. The RAM buffer and the file name stay live. */
+void
+ast_nvr_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ast_nvr_t *nvr  = (ast_nvr_t *) priv;
+    uint8_t   *ram  = nvr->ram;
+    char      *fn   = nvr->fn;
+    int        size = nvr->size;
+    void      *log  = nvr->log;
+
+    rmm_snap_raw(s, nvr, sizeof(ast_nvr_t));
+    nvr->ram  = ram;
+    nvr->fn   = fn;
+    nvr->size = size;
+    nvr->log  = log;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, nvr->ram, (size_t) nvr->size);
+}
+#endif

@@ -1060,3 +1060,20 @@ const device_t if386jega_device = {
     .machine       = "OKI if386AX30L",
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole jega_t (fonts and BIOS image included), then the VRAM of whichever core is live (EGA or VGA). */
+void
+jega_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    jega_t *jega = (jega_t *) priv;
+
+    rmm_snap_raw(s, jega, sizeof(jega_t));
+    if (jega->is_vga)
+        svga_rmm_snap_vram(s, &jega->vga.svga);
+    else
+        ega_rmm_snap_vram(s, &jega->ega);
+}
+#endif

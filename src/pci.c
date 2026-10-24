@@ -1066,3 +1066,44 @@ pci_init(int flags)
 
     pic_set_pci_flag(1);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: config registers, IRQ routing and levels, card and bus tables. */
+void
+pci_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, pci_burst_time);
+    RMM_SNAP_VAR(s, agp_burst_time);
+    RMM_SNAP_VAR(s, pci_nonburst_time);
+    RMM_SNAP_VAR(s, agp_nonburst_time);
+    RMM_SNAP_VAR(s, pci_flags);
+    RMM_SNAP_VAR(s, pci_base);
+    RMM_SNAP_VAR(s, pci_size);
+    RMM_SNAP_VAR(s, pci_cards);
+    RMM_SNAP_VAR(s, pci_card_descs);
+    RMM_SNAP_VAR(s, pci_pmc);
+    RMM_SNAP_VAR(s, last_pci_card);
+    RMM_SNAP_VAR(s, last_normal_pci_card);
+    RMM_SNAP_VAR(s, last_normal_pci_card_id);
+    RMM_SNAP_VAR(s, last_pci_bus);
+    RMM_SNAP_VAR(s, next_pci_card);
+    RMM_SNAP_VAR(s, normal_pci_cards);
+    RMM_SNAP_VAR(s, next_normal_pci_card);
+    RMM_SNAP_VAR(s, pci_card_to_slot_mapping);
+    RMM_SNAP_VAR(s, pci_bus_number_to_index_mapping);
+    RMM_SNAP_VAR(s, pci_irqs);
+    RMM_SNAP_VAR(s, pci_irq_level);
+    RMM_SNAP_VAR(s, pci_irq_hold);
+    RMM_SNAP_VAR(s, pci_mirqs);
+    RMM_SNAP_VAR(s, pci_index);
+    RMM_SNAP_VAR(s, pci_func);
+    RMM_SNAP_VAR(s, pci_card);
+    RMM_SNAP_VAR(s, pci_bus);
+    RMM_SNAP_VAR(s, pci_key);
+    RMM_SNAP_VAR(s, pci_trc_reg);
+    RMM_SNAP_VAR(s, pci_access_len);
+    RMM_SNAP_VAR(s, pci_enable);
+}
+#endif

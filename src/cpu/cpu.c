@@ -43,6 +43,7 @@
 #include <86box/smram.h>
 #include <86box/timer.h>
 #include <86box/gdbstub.h>
+#include <86box/rmm.h>
 #include <86box/plat_fallthrough.h>
 #include <86box/plat_unused.h>
 
@@ -1998,6 +1999,7 @@ cpu_set(void)
         cpu_exec = execx86;
     mmx_init();
     gdbstub_cpu_init();
+    rmm_cpu_init();
 }
 
 /* The P54C or P55C, the Pentiums with an INIT pin and an on-chip APIC. */
@@ -4896,3 +4898,98 @@ cpu_tr_write(int reg, uint32_t val)
             break;
     }
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: CPU run-time state, bus speeds and waitstates. */
+void
+cpu_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, cpu_state);
+    RMM_SNAP_VAR(s, fpu_state);
+    RMM_SNAP_VAR(s, msr);
+    RMM_SNAP_VAR(s, tsc);
+    RMM_SNAP_VAR(s, abrt_error);
+    RMM_SNAP_VAR(s, cpu_fast_off_count);
+    RMM_SNAP_VAR(s, cpu_fast_off_val);
+    RMM_SNAP_VAR(s, cpu_fast_off_flags);
+    RMM_SNAP_VAR(s, temp_seg_data);
+    RMM_SNAP_VAR(s, isa_cycles);
+    RMM_SNAP_VAR(s, cpu_cycles_read);
+    RMM_SNAP_VAR(s, cpu_cycles_read_l);
+    RMM_SNAP_VAR(s, cpu_cycles_write);
+    RMM_SNAP_VAR(s, cpu_cycles_write_l);
+    RMM_SNAP_VAR(s, cpu_prefetch_cycles);
+    RMM_SNAP_VAR(s, cpu_prefetch_width);
+    RMM_SNAP_VAR(s, cpu_mem_prefetch_cycles);
+    RMM_SNAP_VAR(s, cpu_rom_prefetch_cycles);
+    RMM_SNAP_VAR(s, cpu_waitstates);
+    RMM_SNAP_VAR(s, io_waitstates);
+    RMM_SNAP_VAR(s, reg_op_waitstates);
+    RMM_SNAP_VAR(s, cpu_cache_int_enabled);
+    RMM_SNAP_VAR(s, cpu_cache_ext_enabled);
+    RMM_SNAP_VAR(s, cpu_flush_pending);
+    RMM_SNAP_VAR(s, cpu_old_paging);
+    RMM_SNAP_VAR(s, cpu_isa_speed);
+    RMM_SNAP_VAR(s, cpu_pci_speed);
+    RMM_SNAP_VAR(s, cpu_isa_pci_div);
+    RMM_SNAP_VAR(s, cpu_agp_speed);
+    RMM_SNAP_VAR(s, cpu_alt_reset);
+    RMM_SNAP_VAR(s, cpu_override);
+    RMM_SNAP_VAR(s, cpu_cpurst_on_sr);
+    RMM_SNAP_VAR(s, cpu_clock_gated);
+    RMM_SNAP_VAR(s, _tr);
+    /* 486 TR3-TR7 cache arrays. */
+    rmm_snap_data(s);
+    RMM_SNAP_VAR(s, tr_cache_tag);
+    rmm_snap_data(s);
+    RMM_SNAP_VAR(s, tr_cache_data);
+    RMM_SNAP_VAR(s, tr_cache_fill_buf);
+    RMM_SNAP_VAR(s, tr_cache_read_buf);
+    RMM_SNAP_VAR(s, cpu_CR4_mask);
+    RMM_SNAP_VAR(s, cyrix);
+    RMM_SNAP_VAR(s, cyrix_addr);
+    RMM_SNAP_VAR(s, ccr0);
+    RMM_SNAP_VAR(s, ccr1);
+    RMM_SNAP_VAR(s, ccr2);
+    RMM_SNAP_VAR(s, ccr3);
+    RMM_SNAP_VAR(s, ccr4);
+    RMM_SNAP_VAR(s, ccr5);
+    RMM_SNAP_VAR(s, ccr6);
+    RMM_SNAP_VAR(s, ccr7);
+    RMM_SNAP_VAR(s, cxpmr);
+    RMM_SNAP_VAR(s, reg_30);
+    RMM_SNAP_VAR(s, arr);
+    RMM_SNAP_VAR(s, rcr);
+    RMM_SNAP_VAR(s, timing_rr);
+    RMM_SNAP_VAR(s, timing_mr);
+    RMM_SNAP_VAR(s, timing_mrl);
+    RMM_SNAP_VAR(s, timing_rm);
+    RMM_SNAP_VAR(s, timing_rml);
+    RMM_SNAP_VAR(s, timing_mm);
+    RMM_SNAP_VAR(s, timing_mml);
+    RMM_SNAP_VAR(s, timing_bt);
+    RMM_SNAP_VAR(s, timing_bnt);
+    RMM_SNAP_VAR(s, timing_int);
+    RMM_SNAP_VAR(s, timing_int_rm);
+    RMM_SNAP_VAR(s, timing_int_v86);
+    RMM_SNAP_VAR(s, timing_int_pm);
+    RMM_SNAP_VAR(s, timing_int_pm_outer);
+    RMM_SNAP_VAR(s, timing_iret_rm);
+    RMM_SNAP_VAR(s, timing_iret_v86);
+    RMM_SNAP_VAR(s, timing_iret_pm);
+    RMM_SNAP_VAR(s, timing_iret_pm_outer);
+    RMM_SNAP_VAR(s, timing_call_rm);
+    RMM_SNAP_VAR(s, timing_call_pm);
+    RMM_SNAP_VAR(s, timing_call_pm_gate);
+    RMM_SNAP_VAR(s, timing_call_pm_gate_inner);
+    RMM_SNAP_VAR(s, timing_retf_rm);
+    RMM_SNAP_VAR(s, timing_retf_pm);
+    RMM_SNAP_VAR(s, timing_retf_pm_outer);
+    RMM_SNAP_VAR(s, timing_jmp_rm);
+    RMM_SNAP_VAR(s, timing_jmp_pm);
+    RMM_SNAP_VAR(s, timing_jmp_pm_gate);
+    RMM_SNAP_VAR(s, timing_misaligned);
+}
+#endif

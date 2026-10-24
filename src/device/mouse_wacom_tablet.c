@@ -749,3 +749,14 @@ const device_t mouse_wacom_artpad_tablet_device = {
     .force_redraw  = NULL,
     .config        = wacom_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+mouse_wacom_tablet_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(mouse_wacom_t));
+}
+#endif

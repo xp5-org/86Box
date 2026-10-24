@@ -2906,3 +2906,21 @@ const device_t ct5880_onboard_device = {
     .force_redraw  = NULL,
     .config        = es1371_onboard_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole card struct; the host-stream pos/buffer are kept (releasenotes.txt). */
+void
+es137x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    es137x_t *dev = (es137x_t *) priv;
+    int       pos = dev->pos;
+    int16_t   buf[WTBUFLEN * 2];
+
+    memcpy(buf, dev->buffer, sizeof(buf));
+    rmm_snap_raw(s, dev, sizeof(es137x_t));
+    dev->pos = pos;
+    memcpy(dev->buffer, buf, sizeof(buf));
+}
+#endif

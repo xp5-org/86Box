@@ -1945,3 +1945,18 @@ ps1_hdc_inform(void *priv, uint8_t *reg_91)
 
     dev->reg_91 = reg_91;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the controller, its blocks and buffers. The verify bookkeeping list stays live. */
+void
+hdc_xta_ps1_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    hdc_t       *dev = (hdc_t *) priv;
+    raw_check_t *rc  = dev->raw_checks;
+
+    rmm_snap_raw(s, dev, sizeof(hdc_t));
+    dev->raw_checks = rc;
+}
+#endif

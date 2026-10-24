@@ -543,3 +543,19 @@ const device_t mda_device = {
     .force_redraw  = NULL,
     .config        = mda_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_mda_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mda_t *dev = (mda_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(mda_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, MDA_VRAM);
+}
+#endif

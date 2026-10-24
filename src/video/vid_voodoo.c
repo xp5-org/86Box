@@ -1938,3 +1938,130 @@ const device_t voodoo_device = {
     .force_redraw  = voodoo_force_blit,
     .config        = voodoo_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots. Once the FIFO is flushed the FIFO and render threads sit idle in their event
+   waits, so a card is its struct plus its memories. What in the struct names something outside it
+   (threads, events, mutexes, the JIT, the texture decode buffers, the memories) keeps its live
+   value on a restore; the texture cache is then emptied, since it holds decodes of the old texture
+   memory. Banshee and Voodoo3 keep their memory in the SVGA's VRAM, which their own visitor saves. */
+typedef struct voodoo_keep_t {
+    uint8_t             *fb_mem;
+    uint8_t             *tex_mem[2];
+    uint16_t            *tex_mem_w[2];
+    mutex_t             *swap_mutex;
+    mutex_t             *fifo_mutex;
+    mutex_t             *force_blit_mutex;
+    thread_t            *fifo_thread;
+    thread_t            *render_thread[4];
+    event_t             *wake_fifo_thread;
+    event_t             *wake_main_thread;
+    event_t             *fifo_not_full_event;
+    event_t             *render_not_full_event[4];
+    event_t             *wake_render_thread[4];
+    svga_t              *svga;
+    int                  use_recompiler;
+    void                *codegen_data;
+    int                  jit_last_block[4];
+    uint64_t             jit_generation[4];
+    struct voodoo_set_t *set;
+    uint8_t              fifo_thread_run;
+    uint8_t              render_thread_run[4];
+    uint8_t             *vram;
+    uint8_t             *changedvram;
+    uint32_t             vram_max;
+    void                *priv;
+    texture_t            texture_cache[2][TEX_CACHE_MAX];
+} voodoo_keep_t;
+
+#    define VOODOO_KEEP(dir, f) memcpy(dir ? &v->f : &k.f, dir ? &k.f : &v->f, sizeof(k.f))
+
+static void
+voodoo_keep(voodoo_t *v, voodoo_keep_t *kp, int restore)
+{
+    voodoo_keep_t k;
+
+    if (restore)
+        k = *kp;
+    VOODOO_KEEP(restore, fb_mem);
+    VOODOO_KEEP(restore, tex_mem);
+    VOODOO_KEEP(restore, tex_mem_w);
+    VOODOO_KEEP(restore, swap_mutex);
+    VOODOO_KEEP(restore, fifo_mutex);
+    VOODOO_KEEP(restore, force_blit_mutex);
+    VOODOO_KEEP(restore, fifo_thread);
+    VOODOO_KEEP(restore, render_thread);
+    VOODOO_KEEP(restore, wake_fifo_thread);
+    VOODOO_KEEP(restore, wake_main_thread);
+    VOODOO_KEEP(restore, fifo_not_full_event);
+    VOODOO_KEEP(restore, render_not_full_event);
+    VOODOO_KEEP(restore, wake_render_thread);
+    VOODOO_KEEP(restore, svga);
+    VOODOO_KEEP(restore, use_recompiler);
+    VOODOO_KEEP(restore, codegen_data);
+    VOODOO_KEEP(restore, jit_last_block);
+    VOODOO_KEEP(restore, jit_generation);
+    VOODOO_KEEP(restore, set);
+    VOODOO_KEEP(restore, fifo_thread_run);
+    VOODOO_KEEP(restore, render_thread_run);
+    VOODOO_KEEP(restore, vram);
+    VOODOO_KEEP(restore, changedvram);
+    VOODOO_KEEP(restore, vram_max);
+    VOODOO_KEEP(restore, priv);
+    VOODOO_KEEP(restore, texture_cache);
+    if (!restore)
+        *kp = k;
+}
+
+/* One card. The caller holds the machine paused. */
+void
+voodoo_card_rmm_snap(rmm_snap_t *s, voodoo_t *v)
+{
+    voodoo_keep_t keep;
+    const int     restoring = rmm_snap_restoring(s);
+
+    voodoo_flush(v);
+    voodoo_keep(v, &keep, 0);
+    rmm_snap_raw(s, v, sizeof(voodoo_t));
+    if (restoring)
+        voodoo_keep(v, &keep, 1);
+    if (v->type < VOODOO_BANSHEE) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, v->fb_mem, 4 * 1024 * 1024);
+        rmm_snap_data(s);
+        rmm_snap_raw(s, v->tex_mem[0], (size_t) v->texture_size * 1024 * 1024);
+        if (v->dual_tmus) {
+            rmm_snap_data(s);
+            rmm_snap_raw(s, v->tex_mem[1], (size_t) v->texture_size * 1024 * 1024);
+        }
+    }
+    if (restoring) {
+        for (int tmu = 0; tmu < 2; tmu++) {
+            for (int c = 0; c < TEX_CACHE_MAX; c++)
+                v->texture_cache[tmu][c].base = -1;
+            memset(v->texture_present[tmu], 0, sizeof(v->texture_present[0]));
+        }
+        memset(v->dirty_line, 1, sizeof(v->dirty_line));
+        v->dirty_line_low  = 0;
+        v->dirty_line_high = 2047;
+    }
+}
+
+/* Voodoo Graphics / Voodoo 2: the set (one card, or two with SLI). */
+void
+voodoo_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    voodoo_set_t *set = (voodoo_set_t *) priv;
+    voodoo_t     *card[2];
+
+    card[0] = set->voodoos[0];
+    card[1] = set->voodoos[1];
+    rmm_snap_raw(s, set, sizeof(voodoo_set_t));
+    set->voodoos[0] = card[0];
+    set->voodoos[1] = card[1];
+    for (int c = 0; c < set->nr_cards; c++)
+        voodoo_card_rmm_snap(s, set->voodoos[c]);
+}
+#endif

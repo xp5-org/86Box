@@ -34,6 +34,7 @@ extern void  ini_strip_quotes(ini_t ini);
 extern void  ini_write_ex(ini_t ini, const char *fn, int is_rom);
 extern void  ini_write(ini_t ini, const char *fn);
 extern void  ini_dump(ini_t ini);
+extern void  ini_foreach(ini_t ini, void (*cb)(const char *section, const char *key, const char *value, void *priv), void *priv);
 extern void  ini_close(ini_t ini);
 
 extern void     ini_section_delete_var(ini_section_t section, const char *name);

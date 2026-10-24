@@ -214,3 +214,14 @@ const device_t ide_um8673f_device = {
     .short_name    = "UMC UM8673F",
     .ide_boards    = ide_boards_pri_sec
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_ide_um8673f_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(um8673f_t));
+}
+#endif

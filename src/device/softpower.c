@@ -270,3 +270,26 @@ const device_t softpower_device = {
     .force_redraw  = NULL,
     .config        = softpower_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; the control block pointer stays valid within this process. */
+void
+softpower_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    softpower_t         *dev     = (softpower_t *) priv;
+    softpower_control_t *control = dev->control;
+
+    rmm_snap_raw(s, dev, sizeof(softpower_t));
+    dev->control = control;
+    softpower_control_rmm_snap(s, control);
+}
+
+/* The control block is its own allocation and holds the power-off timer. */
+void
+softpower_control_rmm_snap(rmm_snap_t *s, softpower_control_t *control)
+{
+    rmm_snap_raw(s, control, sizeof(softpower_control_t));
+}
+#endif

@@ -6296,3 +6296,47 @@ const device_t aha2944uw_pci_device = {
     .short_name    = "AHA-2944UW",
     .scsi_buses    = aic_scsi_buses
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole chip. Queued command buffers are saved by value; cur is an index. */
+void
+aic7xxx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    aic7xxx_t         *dev    = (aic7xxx_t *) priv;
+    const aic_chip_t  *chip   = dev->chip;
+    nmc93cxx_eeprom_t *eep    = dev->eeprom;
+    void              *fdc    = dev->fdc;
+    int16_t            cur_ix = (dev->cur != NULL) ? (int16_t) (dev->cur - dev->cmds) : -1;
+    uint8_t           *old[AIC_CMDS];
+
+    for (int i = 0; i < AIC_CMDS; i++)
+        old[i] = dev->cmds[i].data;
+    rmm_snap_raw(s, dev, sizeof(*dev));
+    rmm_snap_raw(s, &cur_ix, sizeof(cur_ix));
+    for (int i = 0; i < AIC_CMDS; i++) {
+        aic_cmd_t *c = &dev->cmds[i];
+
+        if (rmm_snap_restoring(s)) {
+            /* replace the saved pointer with a fresh block */
+            uint32_t len = (c->used && c->data) ? c->data_len : 0;
+
+            free(old[i]);
+            c->data = NULL;
+            if (len) {
+                c->data = (uint8_t *) malloc(len);
+                rmm_snap_raw(s, c->data, len);
+            }
+        } else if (c->used && c->data && c->data_len) {
+            rmm_snap_raw(s, c->data, c->data_len);
+        }
+    }
+    if (rmm_snap_restoring(s)) {
+        dev->chip   = chip;
+        dev->eeprom = eep;
+        dev->fdc    = fdc;
+        dev->cur    = (cur_ix >= 0) ? &dev->cmds[cur_ix] : NULL;
+    }
+}
+#endif

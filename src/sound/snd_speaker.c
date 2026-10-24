@@ -150,3 +150,21 @@ const device_t speaker_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: PIT and port 61h state. The sample buffer is kept. */
+void
+speaker_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    speaker_t *dev = (speaker_t *) priv;
+
+    RMM_SNAP_VAR(s, dev->mode);
+    RMM_SNAP_VAR(s, dev->count);
+    RMM_SNAP_VAR(s, speaker_gated);
+    RMM_SNAP_VAR(s, speaker_enable);
+    RMM_SNAP_VAR(s, was_speaker_enable);
+    RMM_SNAP_VAR(s, speakon);
+}
+#endif

@@ -698,3 +698,24 @@ const device_t lpt_prt_pcl_device = {
     .force_redraw  = NULL,
     .config        = lpt_prt_pcl_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: handshake lines, language state and the pending job buffer. Port and paths stay live. */
+void
+prt_ps_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ps_t *dev = (ps_t *) priv;
+    void *lpt = dev->lpt;
+    char  ppath[sizeof(dev->printer_path)];
+    char  fname[sizeof(dev->filename)];
+
+    memcpy(ppath, dev->printer_path, sizeof(ppath));
+    memcpy(fname, dev->filename, sizeof(fname));
+    rmm_snap_raw(s, dev, sizeof(ps_t));
+    dev->lpt = lpt;
+    memcpy(dev->printer_path, ppath, sizeof(ppath));
+    memcpy(dev->filename, fname, sizeof(fname));
+}
+#endif

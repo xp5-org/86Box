@@ -332,3 +332,19 @@ const device_t grid1520_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+grid1520_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    grid_t *dev = (grid_t *) priv;
+    uint8_t save_grid_ems_mapping[sizeof(dev->grid_ems_mapping)];
+
+    memcpy(save_grid_ems_mapping, &dev->grid_ems_mapping, sizeof(dev->grid_ems_mapping));
+    rmm_snap_raw(s, dev, sizeof(grid_t));
+    memcpy(&dev->grid_ems_mapping, save_grid_ems_mapping, sizeof(dev->grid_ems_mapping));
+}
+#endif

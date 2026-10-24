@@ -456,3 +456,14 @@ const device_t mouse_ps2_device = {
     .force_redraw  = NULL,
     .config        = ps2_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the PS/2 mouse's queues, mode and flags; the KBC port pointer stays valid within this process. */
+void
+mouse_ps2_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(atkbc_dev_t));
+}
+#endif

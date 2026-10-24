@@ -229,3 +229,14 @@ const device_t sc11487_nors2_ramdac_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+vid_ramdac_sc1148x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(sc1148x_ramdac_t));
+}
+#endif

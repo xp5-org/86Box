@@ -1185,3 +1185,36 @@ const device_t stpc_lpt_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its SMRAM and sub-devices are owned elsewhere. */
+void
+stpc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(stpc_t));
+}
+#endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the pointers to the two UARTs, which the serial pass owns. */
+void
+stpc_serial_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(stpc_serial_t));
+}
+#endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the lock and register bytes. */
+void
+stpc_lpt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(stpc_lpt_t));
+}
+#endif

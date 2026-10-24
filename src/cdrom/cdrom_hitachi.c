@@ -673,3 +673,14 @@ const device_t hitachi_cdrom_mca_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its four drive units. */
+void
+hitachi_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(hitachi_t));
+}
+#endif

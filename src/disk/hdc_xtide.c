@@ -821,3 +821,18 @@ const device_t jride_device = {
     .short_name    = "jr-IDE",
     .ide_boards    = ide_boards_primary
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its IDE board, copied back in place. */
+void
+xtide_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    xtide_t *xtide = (xtide_t *) priv;
+
+    rmm_snap_raw(s, xtide, sizeof(xtide_t));
+    if (xtide->ide_board)
+        ide_board_rmm_snap(s, xtide->ide_board);
+}
+#endif

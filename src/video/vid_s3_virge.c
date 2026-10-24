@@ -6967,3 +6967,17 @@ const device_t s3_trio3d2x_agp_device = {
     .force_redraw  = s3_virge_force_redraw,
     .config        = s3_trio3d2x_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_s3_virge_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    virge_t *dev = (virge_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(virge_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

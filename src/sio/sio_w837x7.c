@@ -476,3 +476,14 @@ const device_t w837x7_device = {
     .config        = NULL
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: configuration registers. */
+void
+w837x7_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(w837x7_t));
+}
+#endif

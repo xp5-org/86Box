@@ -1194,3 +1194,22 @@ const device_t vlsi_scamp_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the RAM banks and the 1 MB window mappings stay live (the memory pass owns them). */
+void
+scamp_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    scamp_t       *dev = (scamp_t *) priv;
+    mem_mapping_t  ram[2];
+    mem_mapping_t  maps[64];
+
+    memcpy(ram, dev->ram_mapping, sizeof(ram));
+    memcpy(maps, dev->mem_mappings, sizeof(maps));
+    rmm_snap_raw(s, dev, sizeof(scamp_t));
+    memcpy(dev->ram_mapping, ram, sizeof(ram));
+    memcpy(dev->mem_mappings, maps, sizeof(maps));
+}
+#endif

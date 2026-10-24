@@ -3752,3 +3752,33 @@ const device_t lpt_ditto_device = {
     .force_redraw  = NULL,
     .config        = ditto_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: bridge, drive and ECC state, plus the 128 KB FIFO buffer. The port handle,
+   the open image and the cartridge geometry (the medium) stay live; the timers go with the global
+   timer list. */
+void
+ditto_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ditto_t *dev = (ditto_t *) priv;
+    ditto_t  keep;
+
+    memcpy(&keep, dev, sizeof(ditto_t));
+    rmm_snap_raw(s, dev, sizeof(ditto_t));
+    dev->lpt          = keep.lpt;
+    dev->fp           = keep.fp;
+    dev->buffer       = keep.buffer;
+    dev->image_size   = keep.image_size;
+    dev->image_loaded = keep.image_loaded;
+    dev->segs_per_cyl = keep.segs_per_cyl;
+    dev->segs_per_head = keep.segs_per_head;
+    dev->tape_tracks  = keep.tape_tracks;
+    dev->tape_spt     = keep.tape_spt;
+    dev->readonly     = keep.readonly;
+    memcpy(dev->image_fn, keep.image_fn, sizeof(dev->image_fn));
+    if (keep.buffer)
+        rmm_snap_raw(s, keep.buffer, DITTO_BUFFER_SIZE);
+}
+#endif

@@ -1007,3 +1007,21 @@ const device_t quadcolor_device = {
     .force_redraw  = NULL,
     .config        = quadcolor_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_quadcolor_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    quadcolor_t *dev = (quadcolor_t *) priv;
+    uint8_t *b0 = dev->vram;
+    uint8_t *b1 = dev->vram_2;
+
+    rmm_snap_raw(s, dev, sizeof(quadcolor_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, DEVICE_VRAM);
+    rmm_snap_raw(s, b1, 0x10000);
+}
+#endif

@@ -3132,3 +3132,64 @@ machine_xt_ibm5535_init(const machine_t *model)
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the planar (video, NVRAM, timers, diagnostic file) and its heap buffers. */
+static void
+epoch_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    epoch_t *e         = (epoch_t *) priv;
+    uint8_t *cram      = e->cram;
+    uint8_t *vram      = e->vram;
+    uint8_t *paritybad = e->paritybad;
+    uint8_t *fontrom   = e->fontcard_rom;
+    uint8_t *fontwin   = e->fontcard_win;
+    void    *nvr_data  = e->nvr.data;
+    char    *nvr_fn    = e->nvr.fn;
+
+    rmm_snap_raw(s, e, sizeof(epoch_t));
+    e->cram          = cram;
+    e->vram          = vram;
+    e->paritybad     = paritybad;
+    e->fontcard_rom  = fontrom;
+    e->fontcard_win  = fontwin;
+    e->nvr.data      = nvr_data;
+    e->nvr.fn        = nvr_fn;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, vram, 256 * 1024);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, cram, 4 * 1024);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, paritybad, 0xA0000 >> 3);
+    if (fontwin) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, fontwin, EPOCH_FONTCARD_WIN_SIZE);
+    }
+    if (rmm_snap_restoring(s))
+        e->fullchange = 3;
+}
+
+/* The keyboard controller, and the keyboard's own queue that sits in globals. */
+static void
+epoch_kbd_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(epochkbd_t));
+    RMM_SNAP_VAR(s, key_queue);
+    RMM_SNAP_VAR(s, key_queue_start);
+    RMM_SNAP_VAR(s, key_queue_end);
+}
+
+/* The planar and keyboard controller devices are visible to this file only (or, for the
+   machine devices, are shared by two machines that carry the same state). */
+rmm_snap_fn
+epoch_rmm_snap_fn(const device_t *dev)
+{
+    if ((dev == &ibm5550_device) || (dev == &ibm5535_device))
+        return epoch_rmm_snap;
+    if (dev == &kbc_epoch_device)
+        return epoch_kbd_rmm_snap;
+    return NULL;
+}
+#endif

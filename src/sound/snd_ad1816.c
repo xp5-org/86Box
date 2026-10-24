@@ -1478,3 +1478,22 @@ const device_t ad1816_device = {
     .config        = ad1816_config
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card. The host-stream position and buffer are kept; PnP state is in the ISAPnP pass. */
+void
+snd_ad1816_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ad1816_t *dev = (ad1816_t *) priv;
+    unsigned char pos[sizeof(dev->pos)];
+    unsigned char buf[sizeof(dev->buffer)];
+
+    memcpy(pos, &dev->pos, sizeof(pos));
+    memcpy(buf, dev->buffer, sizeof(buf));
+    rmm_snap_raw(s, dev, sizeof(ad1816_t));
+    memcpy(&dev->pos, pos, sizeof(pos));
+    memcpy(dev->buffer, buf, sizeof(buf));
+}
+#endif

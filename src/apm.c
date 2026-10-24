@@ -152,3 +152,14 @@ const device_t apm_pci_acpi_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the command and status ports. */
+void
+apm_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(apm_t));
+}
+#endif

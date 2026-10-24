@@ -23,3 +23,15 @@ ppi_reset(void)
 {
     memset(&ppi, 0x00, sizeof(PPI));
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: port 61 latch and PIT channel 2 output. */
+void
+ppi_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, ppi);
+    RMM_SNAP_VAR(s, ppispeakon);
+}
+#endif

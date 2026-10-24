@@ -452,3 +452,18 @@ const device_t sis_5595_pmu_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+sis_5595_pmu_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sis_5595_pmu_t *dev = (sis_5595_pmu_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(sis_5595_pmu_t));
+    for (int i = 0; i < 22; i++)
+        io_trap_rmm_snap(s, dev->io_traps[i].trap);
+}
+#endif

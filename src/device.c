@@ -654,6 +654,19 @@ device_find_first_priv(uint32_t match_flags)
     return ret;
 }
 
+#ifdef USE_RMM
+/* For the monitor's snapshots: walk the device table. 0 past the end. */
+int
+device_rmm_get(int c, const device_t **dev, void **priv)
+{
+    if ((c < 0) || (c >= DEVICE_MAX))
+        return 0;
+    *dev  = devices[c];
+    *priv = device_priv[c];
+    return 1;
+}
+#endif
+
 void *
 device_get_priv(const device_t *dev)
 {

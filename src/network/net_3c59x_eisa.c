@@ -2292,3 +2292,14 @@ const device_t threec592_device = {
     .force_redraw  = NULL,
     .config        = tc59x_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+net_3c59x_eisa_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(tc59x_t));
+}
+#endif

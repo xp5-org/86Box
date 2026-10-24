@@ -3758,3 +3758,30 @@ da2_device_add(void)
     else
         return;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct (its two windows stay live), VRAM, character RAM and font by value, and the VGA it owns when it is not riding a primary card. */
+void
+ps55da2_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    da2_t        *da2 = (da2_t *) priv;
+    mem_mapping_t cmap = da2->cmapping;
+    mem_mapping_t mmap = da2->mmio.mapping;
+
+    rmm_snap_raw(s, da2, sizeof(da2_t));
+    da2->cmapping     = cmap;
+    da2->mmio.mapping = mmap;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, da2->vram, DA2_SIZE_VRAM);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, da2->cram, DA2_SIZE_CRAM);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, da2->mmio.font, da2->mmio.font_size);
+    if (rmm_snap_restoring(s))
+        memset(da2->changedvram, 3, (DA2_MASK_VRAMPLANE + 1) >> 9);
+    if (da2->vga)
+        vga_rmm_snap(s, da2->vga);
+}
+#endif

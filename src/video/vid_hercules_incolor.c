@@ -1113,3 +1113,19 @@ const device_t incolor_device = {
     .force_redraw  = NULL,
     .config        = incolor_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_hercules_incolor_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    incolor_t *dev = (incolor_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(incolor_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x40000);
+}
+#endif

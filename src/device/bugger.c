@@ -358,3 +358,21 @@ const device_t bugger_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the Bugger card's registers (file statics). */
+void
+bugger_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    (void) priv;
+    RMM_SNAP_VAR(s, bug_ctrl);
+    RMM_SNAP_VAR(s, bug_data);
+    RMM_SNAP_VAR(s, bug_ledr);
+    RMM_SNAP_VAR(s, bug_ledg);
+    RMM_SNAP_VAR(s, bug_seg1);
+    RMM_SNAP_VAR(s, bug_seg2);
+    RMM_SNAP_VAR(s, bug_spcfg);
+}
+#endif

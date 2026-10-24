@@ -941,3 +941,14 @@ const device_t aha1744_device = {
     .config        = aha1740_config,
     .short_name    = "AHA-1744"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+scsi_aha1740_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(aha1740_t));
+}
+#endif

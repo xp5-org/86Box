@@ -518,3 +518,25 @@ fpu_postamble(void)
 
     cpu_state.fpu_ea = cpu_state.eaaddr;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: pending NMI, reset and trap state. */
+void
+x86_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, opcode);
+    RMM_SNAP_VAR(s, rmdat);
+    RMM_SNAP_VAR(s, nmi);
+    RMM_SNAP_VAR(s, nmi_auto_clear);
+    RMM_SNAP_VAR(s, x86_was_reset);
+    RMM_SNAP_VAR(s, soft_reset_pci);
+    RMM_SNAP_VAR(s, trap);
+    RMM_SNAP_VAR(s, easeg);
+    RMM_SNAP_VAR(s, reset_on_hlt);
+    RMM_SNAP_VAR(s, hlt_reset_pending);
+    RMM_SNAP_VAR(s, fpu_cycles);
+    RMM_SNAP_VAR(s, in_lock);
+}
+#endif

@@ -2466,3 +2466,36 @@ machine_xt_m19_init(const machine_t *model)
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the M19 video, an OGC and a Colorplus core, and the 32 KB of VRAM each owns by value. */
+void
+m19_vid_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    m19_vid_t *vid = (m19_vid_t *) priv;
+    uint8_t   *v0  = vid->ogc.cga.vram;
+    uint8_t   *v1  = vid->colorplus.cga.vram;
+
+    rmm_snap_raw(s, vid, sizeof(m19_vid_t));
+    vid->ogc.cga.vram       = v0;
+    vid->colorplus.cga.vram = v1;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, v0, 0x8000);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, v1, 0x8000);
+}
+#endif
+
+#ifdef USE_RMM
+/* Monitor snapshots: the M24/M240 keyboard and mouse controller, and the key queue in globals. */
+void
+m24_kbd_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(m24_kbd_t));
+    RMM_SNAP_VAR(s, key_queue);
+    RMM_SNAP_VAR(s, key_queue_start);
+    RMM_SNAP_VAR(s, key_queue_end);
+}
+#endif

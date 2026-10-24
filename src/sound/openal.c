@@ -456,8 +456,8 @@ inital(void)
 void
 givealbuffer_common(const void *buf, const uint8_t src, const int size)
 {
-    int    processed;
-    int    state;
+    int    processed = 0; /* alGetSourcei leaves these untouched when it fails */
+    int    state     = 0;
     ALuint buffer;
 
     if (!initialized || fast_forward)

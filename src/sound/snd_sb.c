@@ -10325,3 +10325,58 @@ const device_t ess_1869_onboard_device = {
     .force_redraw  = NULL,
     .config        = ess_1688_pnp_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: any sb_t card and its MPU-401, saved raw. The host-stream positions and
+   buffers (dsp, cms, ESS second DAC, EMU8000) are kept. See releasenotes.txt. The EMU8000 sample
+   RAM travels by value. */
+void
+sb16_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sb_t   *sb = (sb_t *) priv;
+    int     pos = sb->dsp.pos;
+    int16_t buf[SOUNDBUFLEN * 2];
+    int16_t cms_buf[SOUNDBUFLEN * 2];
+    uint16_t cms_pos = sb->cms.pos;
+    int      dac2_pos = sb->ess_dac2_pos;
+    int16_t  dac2_buf[SOUNDBUFLEN * 2];
+
+    memcpy(buf, sb->dsp.buffer, sizeof(buf));
+    memcpy(cms_buf, sb->cms.buffer, sizeof(cms_buf));
+    int      emu_pos = sb->emu8k.pos;
+    int32_t  emu_buf[WTBUFLEN * 2];
+
+    memcpy(dac2_buf, sb->ess_dac2_buffer, sizeof(dac2_buf));
+    memcpy(emu_buf, sb->emu8k.buffer, sizeof(emu_buf));
+    rmm_snap_raw(s, sb, sizeof(sb_t));
+    sb->emu8k.pos = emu_pos;
+    memcpy(sb->emu8k.buffer, emu_buf, sizeof(emu_buf));
+    sb->dsp.pos = pos;
+    memcpy(sb->dsp.buffer, buf, sizeof(buf));
+    sb->cms.pos = cms_pos;
+    memcpy(sb->cms.buffer, cms_buf, sizeof(cms_buf));
+    sb->ess_dac2_pos = dac2_pos;
+    memcpy(sb->ess_dac2_buffer, dac2_buf, sizeof(dac2_buf));
+
+    if (sb->mpu)
+        rmm_snap_raw(s, sb->mpu, sizeof(mpu_t));
+    emu8k_rmm_snap_ram(s, &sb->emu8k);
+}
+
+/* Monitor snapshots: the Goldfinch board, which is an EMU8000 and a PnP ROM. */
+void
+goldfinch_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    goldfinch_t *g       = (goldfinch_t *) priv;
+    int          emu_pos = g->emu8k.pos;
+    int32_t      emu_buf[WTBUFLEN * 2];
+
+    memcpy(emu_buf, g->emu8k.buffer, sizeof(emu_buf));
+    rmm_snap_raw(s, g, sizeof(goldfinch_t));
+    g->emu8k.pos = emu_pos;
+    memcpy(g->emu8k.buffer, emu_buf, sizeof(emu_buf));
+    emu8k_rmm_snap_ram(s, &g->emu8k);
+}
+#endif

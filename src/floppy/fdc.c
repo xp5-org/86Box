@@ -3361,3 +3361,20 @@ const device_t fdc_ps2_mca_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: controller and FIFO. Drives are in fdd_rmm_snap(). */
+void
+fdc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    fdc_t *fdc = (fdc_t *) priv;
+
+    rmm_snap_raw(s, fdc, sizeof(fdc_t));
+    if (fdc->fifo_p)
+        rmm_snap_raw(s, fdc->fifo_p, sizeof(fifo16_t));
+    RMM_SNAP_VAR(s, current_drive);
+    RMM_SNAP_VAR(s, lastbyte);
+}
+#endif

@@ -754,3 +754,14 @@ const device_t sb16_scsi_device = {
     .config        = &aha1520a_config[1],
     .short_name    = "SB16 SCSI"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole chip state, copied back in place. */
+void
+aic6360_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(aic6360_t));
+}
+#endif

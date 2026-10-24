@@ -268,3 +268,17 @@ const device_t ibm_ps1_2121_device = {
     .force_redraw  = vid_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_ti_cf62011_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    tivga_t *dev = (tivga_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(tivga_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

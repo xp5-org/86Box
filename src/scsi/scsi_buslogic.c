@@ -2027,3 +2027,18 @@ const device_t buslogic_958d_pci_device = {
     .config        = BT958D_Config,
     .short_name    = "BT-958D"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: x54x core and BusLogic data block, copied back in place. */
+void
+buslogic_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    x54x_t *dev = (x54x_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(x54x_t));
+    if (dev->ven_data)
+        rmm_snap_raw(s, dev->ven_data, sizeof(buslogic_data_t));
+}
+#endif

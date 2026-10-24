@@ -1097,3 +1097,14 @@ const device_t opti55x_noide_device = {
     .config        = NULL
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+opti55x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(opti55x_t));
+}
+#endif

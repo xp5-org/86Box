@@ -4691,3 +4691,36 @@ const device_t gus_pnp_compaq_device = {
     .config        = gus_pnp_compaq_config,
     .alias         = "STB UltraSound 32"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card struct and its ad1848 (play FIFO), the sample RAM by value and, for the Extreme, its ES1688. RAM/ROM/ESS pointers and the host-stream pos/buffer are kept (releasenotes.txt). */
+void
+gus_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    gus_t   *g   = (gus_t *) priv;
+    uint8_t *ram = g->ram;
+    uint8_t *rom = g->rom;
+    sb_t    *ess = g->ess;
+    int      pos = g->pos;
+    int16_t  buf[2][SOUNDBUFLEN];
+
+    memcpy(buf, g->buffer, sizeof(buf));
+    if (g->ad1848.play_fifo)
+        ad1848_rmm_snap_embedded(s, &g->ad1848, g, sizeof(gus_t));
+    else
+        rmm_snap_raw(s, g, sizeof(gus_t));
+    g->ram = ram;
+    g->rom = rom;
+    g->ess = ess;
+    g->pos = pos;
+    memcpy(g->buffer, buf, sizeof(buf));
+    if (ram && g->gus_end_ram) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, ram, g->gus_end_ram);
+    }
+    if (ess)
+        sb16_rmm_snap(s, ess);
+}
+#endif

@@ -246,3 +246,19 @@ const device_t lpt_opl3_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the port-side state and the adlib_t it owns. The host-stream position and buffer are kept. */
+void
+snd_lpt_adlipt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    adlipt_t *dev  = (adlipt_t *) priv;
+    adlib_t *chip = dev->adlib;
+
+    rmm_snap_raw(s, dev, sizeof(adlipt_t));
+    dev->adlib = chip;
+    rmm_snap_raw(s, chip, sizeof(adlib_t));
+}
+#endif

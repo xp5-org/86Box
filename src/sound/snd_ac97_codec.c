@@ -997,3 +997,20 @@ const device_t si3036_device = {
     .config        = NULL
 };
 #endif
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the register file, then the vendor register pages (heap, 16 bytes a page) by value. */
+void
+ac97_codec_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ac97_codec_t *dev   = (ac97_codec_t *) priv;
+    uint16_t     *pages = dev->vendor_reg_pages;
+
+    rmm_snap_raw(s, dev, sizeof(ac97_codec_t));
+    dev->vendor_reg_pages = pages;
+    if (pages)
+        rmm_snap_raw(s, pages, 16 * dev->vendor_reg_page_max);
+}
+#endif

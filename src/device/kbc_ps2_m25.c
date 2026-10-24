@@ -391,3 +391,13 @@ const device_t kbc_ps2_m25_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the port latches, the per-interface transmit state and the poll timer. */
+void
+ps2_m25_kbc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ps2_m25_kbc_t));
+}
+#endif

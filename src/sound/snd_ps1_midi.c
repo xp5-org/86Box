@@ -162,3 +162,20 @@ const device_t ps1midi_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct, then the MIDI FIFO's heap buffer by value (the FIFO keeps its pointer). */
+void
+ps1midi_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ps1midi_t *dev  = (ps1midi_t *) priv;
+    uint8_t   *data = dev->fifo.data;
+
+    rmm_snap_raw(s, dev, sizeof(ps1midi_t));
+    dev->fifo.data = data;
+    if (data)
+        rmm_snap_raw(s, data, dev->fifo.capacity);
+}
+#endif

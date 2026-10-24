@@ -1453,3 +1453,28 @@ static const device_t isapnp_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: PnP state, cards and logical devices, copied back in place. */
+static void
+isapnp_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    isapnp_t *dev = (isapnp_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(isapnp_t));
+    for (isapnp_card_t *card = dev->first_card; card; card = card->next) {
+        rmm_snap_raw(s, card, sizeof(isapnp_card_t));
+        for (isapnp_device_t *ld = card->first_ld; ld; ld = ld->next)
+            rmm_snap_raw(s, ld, sizeof(isapnp_device_t));
+    }
+}
+
+/* Visitor for the PnP bus. */
+rmm_snap_fn
+isapnp_rmm_snap_fn(const device_t *dev)
+{
+    return (dev == &isapnp_device) ? isapnp_rmm_snap : NULL;
+}
+#endif

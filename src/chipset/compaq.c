@@ -133,3 +133,19 @@ const device_t compaq_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+compaq_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    cpq_t *dev = (cpq_t *) priv;
+    uint8_t save_ram_mapping[sizeof(dev->ram_mapping)];
+
+    memcpy(save_ram_mapping, &dev->ram_mapping, sizeof(dev->ram_mapping));
+    rmm_snap_raw(s, dev, sizeof(cpq_t));
+    memcpy(&dev->ram_mapping, save_ram_mapping, sizeof(dev->ram_mapping));
+}
+#endif

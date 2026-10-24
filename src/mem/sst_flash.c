@@ -1114,3 +1114,18 @@ const device_t amd_flash_29f002nbt_device = {
     .config        = NULL
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: command state machine and flash contents. */
+void
+sst_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sst_t *dev = (sst_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(sst_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->array, biosmask + 1);
+}
+#endif

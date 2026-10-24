@@ -2033,6 +2033,9 @@ d86f_format_turbo_finish(void *priv, const int side, const int do_write)
         fdc_cannotformat(drv->fdc);
 }
 
+/* Sector IDs of the track being formatted; file scope so snapshots can save it. */
+static int id_count = 4;
+
 void
 d86f_format_track(void *priv, const int side, int do_write)
 {
@@ -2044,7 +2047,6 @@ d86f_format_track(void *priv, const int side, int do_write)
     int          gap_sizes[4] = { 0, 0, 0, 0 };
     int          am_len       = 0;
     int          sync_len     = 0;
-    static int   id_count     = 4;
     const int    mfm          = d86f_is_mfm(drv);
     uint16_t     max_len;
 
@@ -4082,3 +4084,65 @@ d86f_destroy(void *priv)
 
     drv->d86f_handler.read_data = NULL;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: a drive's track encoder state. Turbo-mode sector lists are rebuilt. */
+void
+d86f_rmm_snap(rmm_snap_t *s, fdd_drive_t *drv)
+{
+    d86f_t   *dev = (d86f_t *) drv->d86f_priv;
+    sector_t *p;
+    uint32_t  n;
+
+    if (!dev)
+        return;
+    if (rmm_snap_restoring(s)) {
+        d86f_destroy_linked_lists(drv, 0);
+        d86f_destroy_linked_lists(drv, 1);
+    }
+    rmm_snap_raw(s, dev, sizeof(d86f_t));
+    RMM_SNAP_VAR(s, id_count); /* shared by the drives; saved with each */
+    for (int side = 0; side < 2; side++) {
+        if (dev->track_surface_data[side]) {
+            rmm_snap_data(s);
+            rmm_snap_raw(s, dev->track_surface_data[side], 53048 * sizeof(uint16_t));
+        }
+        for (int i = 0; i < 2; i++)
+            if (dev->thin_track_surface_data[side][i]) {
+                rmm_snap_data(s);
+                rmm_snap_raw(s, dev->thin_track_surface_data[side][i], 53048 * sizeof(uint16_t));
+            }
+    }
+
+    /* Newest first, as the list runs. */
+    for (int side = 0; side < 2; side++) {
+        if (!rmm_snap_restoring(s)) {
+            n = 0;
+            for (p = dev->last_side_sector[side]; p; p = p->prev)
+                n++;
+            RMM_SNAP_VAR(s, n);
+            for (p = dev->last_side_sector[side]; p; p = p->prev)
+                rmm_snap_raw(s, p, sizeof(sector_t));
+            continue;
+        }
+        sector_t *newest = NULL;
+        sector_t *last   = NULL;
+
+        n = 0;
+        RMM_SNAP_VAR(s, n);
+        for (uint32_t i = 0; i < n; i++) {
+            p = (sector_t *) calloc(1, sizeof(sector_t));
+            rmm_snap_raw(s, p, sizeof(sector_t));
+            p->prev = NULL;
+            if (last)
+                last->prev = p;
+            else
+                newest = p;
+            last = p;
+        }
+        dev->last_side_sector[side] = newest;
+    }
+}
+#endif

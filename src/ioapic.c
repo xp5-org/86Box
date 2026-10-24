@@ -142,3 +142,14 @@ const device_t ioapic_ami_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the POST-code trigger. */
+void
+ioapic_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ioapic_t));
+}
+#endif

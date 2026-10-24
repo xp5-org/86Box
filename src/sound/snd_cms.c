@@ -289,3 +289,22 @@ const device_t cms_device = {
     .force_redraw  = NULL,
     .config        = cms_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. The host-stream position and buffer are kept (releasenotes.txt). */
+void
+snd_cms_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    cms_t *dev = (cms_t *) priv;
+    unsigned char pos0[sizeof(dev->pos)];
+    unsigned char buf0[sizeof(dev->buffer)];
+
+    memcpy(pos0, &dev->pos, sizeof(pos0));
+    memcpy(buf0, dev->buffer, sizeof(buf0));
+    rmm_snap_raw(s, dev, sizeof(cms_t));
+    memcpy(&dev->pos, pos0, sizeof(pos0));
+    memcpy(dev->buffer, buf0, sizeof(buf0));
+}
+#endif

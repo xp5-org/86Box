@@ -2671,3 +2671,19 @@ svga_readl_linear(uint32_t addr, void *priv)
 {
     return svga_readl_common(addr, 1, priv);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots, for cards that embed an svga_t: the VRAM by value, then every page is marked changed on restore. */
+void
+svga_rmm_snap_vram(rmm_snap_t *s, svga_t *svga)
+{
+    rmm_snap_data(s);
+    rmm_snap_raw(s, svga->vram, svga->vram_max);
+    if (rmm_snap_restoring(s)) {
+        memset(svga->changedvram, changeframecount, (svga->vram_max >> 12) + 1);
+        svga->fullchange = changeframecount;
+    }
+}
+#endif

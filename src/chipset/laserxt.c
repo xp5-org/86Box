@@ -468,3 +468,35 @@ const device_t lxt3_device = {
     .force_redraw  = NULL,
     .config        = lxt3_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the chipset, then each EMS board and its RAM by value. The EMS windows stay live (the memory pass owns the mappings). */
+void
+lxt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    lxt_t *dev = (lxt_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(lxt_t));
+    for (int i = 0; i < 2; i++) {
+        lxt_ems_board_t *b = dev->ems_boards[i];
+        mem_mapping_t    maps[4];
+        uint8_t         *ram;
+
+        if (!b)
+            continue;
+        ram = b->ram;
+        for (int j = 0; j < 4; j++)
+            memcpy(&maps[j], &b->ems[j].mapping, sizeof(mem_mapping_t));
+        rmm_snap_raw(s, b, sizeof(lxt_ems_board_t));
+        for (int j = 0; j < 4; j++)
+            memcpy(&b->ems[j].mapping, &maps[j], sizeof(mem_mapping_t));
+        b->ram = ram;
+        if (ram && b->mem_size) {
+            rmm_snap_data(s);
+            rmm_snap_raw(s, ram, b->mem_size);
+        }
+    }
+}
+#endif

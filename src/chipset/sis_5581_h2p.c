@@ -557,3 +557,18 @@ const device_t sis_5581_h2p_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct and its I/O traps. SMRAM is owned by the SMRAM pass. */
+void
+sis_5581_h2p_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sis_5581_host_to_pci_t *dev = (sis_5581_host_to_pci_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(sis_5581_host_to_pci_t));
+    for (int i = 0; i < 10; i++)
+        io_trap_rmm_snap(s, dev->io_traps[i].trap);
+}
+#endif

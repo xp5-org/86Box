@@ -474,3 +474,19 @@ const device_t colorplus_device = {
     .force_redraw  = NULL,
     .config        = colorplus_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_colorplus_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    colorplus_t *dev = (colorplus_t *) priv;
+    uint8_t *b0 = dev->cga.vram;
+
+    rmm_snap_raw(s, dev, sizeof(colorplus_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x8000);
+}
+#endif

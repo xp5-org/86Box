@@ -586,3 +586,23 @@ const device_t amd_flash_am29f016d_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: command cycle state and the 2 MB array. The path and mappings stay live. */
+void
+amd_flash_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    am29f016d_t *dev = (am29f016d_t *) priv;
+    char         path[sizeof(dev->flash_path)];
+    mem_mapping_t low  = dev->low_mapping;
+    mem_mapping_t high = dev->high_mapping;
+
+    memcpy(path, dev->flash_path, sizeof(path));
+    rmm_snap_raw(s, dev, sizeof(am29f016d_t));
+    memcpy(dev->flash_path, path, sizeof(path));
+    dev->low_mapping  = low;
+    dev->high_mapping = high;
+}
+#endif

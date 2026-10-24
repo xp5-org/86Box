@@ -265,3 +265,13 @@ const device_t char_loopback_lpt_device = {
     .force_redraw  = NULL,
     .config        = char_loopback_lpt_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+void
+char_loopback_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(char_loopback_t));
+}
+#endif

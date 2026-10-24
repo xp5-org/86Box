@@ -48,6 +48,10 @@ extern "C" {
 #endif
 }
 
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+#endif
+
 #define RSM_FRAC 10
 
 enum {
@@ -87,6 +91,9 @@ public:
     virtual int32_t *update()                                                = 0;
     virtual uint8_t  read(uint16_t addr)                                     = 0;
     virtual void     set_clock(uint32_t clock)                               = 0;
+#ifdef USE_RMM
+    virtual void     rmm_snap(rmm_snap_t *s)                                 = 0;
+#endif
 
 protected:
     int32_t  m_buffer[MUSICBUFLEN * 2];
@@ -271,6 +278,27 @@ public:
         return m_cs ? 0x8000 : 0x0000;
 #endif
     }
+
+#ifdef USE_RMM
+    /* Monitor snapshots: the whole chip object (core state, timers, resampler), saved raw. The
+       vtable and the interface pointers stay valid within this process. The 2 MB wave ROM is
+       constant and skipped; the host-stream position and buffer are kept (releasenotes.txt). */
+    virtual void rmm_snap(rmm_snap_t *s) override
+    {
+        uint8_t *base = (uint8_t *) this;
+        uint8_t *r0   = m_yrw801;
+        uint8_t *r1   = m_yrw801 + sizeof(m_yrw801);
+        uint8_t *end  = base + sizeof(*this);
+        int      pos  = m_buf_pos;
+        int32_t  buf[MUSICBUFLEN * 2];
+
+        memcpy(buf, m_buffer, sizeof(buf));
+        rmm_snap_raw(s, base, (size_t) (r0 - base));
+        rmm_snap_raw(s, r1, (size_t) (end - r1));
+        m_buf_pos = pos;
+        memcpy(m_buffer, buf, sizeof(buf));
+    }
+#endif
 
     static void timer1(void *priv)
     {
@@ -913,3 +941,11 @@ const fm_drv_t ymfm_drv {
 #endif
 
 }
+
+#ifdef USE_RMM
+extern "C" void
+ymfm_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ((YMFMChipBase *) priv)->rmm_snap(s);
+}
+#endif

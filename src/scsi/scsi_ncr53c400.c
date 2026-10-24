@@ -1257,3 +1257,14 @@ const device_t scsi_ls2000_device = {
     .config        = ncr53c400_mmio_config,
     .short_name    = "LS2000"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded NCR 5380, copied back in place. */
+void
+ncr53c400_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ncr53c400_t));
+}
+#endif

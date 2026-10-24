@@ -715,3 +715,16 @@ const device_t ymf701_device = {
     .force_redraw  = NULL,
     .config        = ymf701_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded AD1848 core. The host-stream position and buffer are kept. */
+void
+snd_ymf701_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ymf701_t *dev = (ymf701_t *) priv;
+
+    ad1848_rmm_snap_embedded(s, &dev->ad1848, dev, sizeof(ymf701_t));
+}
+#endif

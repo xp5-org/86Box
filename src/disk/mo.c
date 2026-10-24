@@ -2251,3 +2251,76 @@ mo_close(void)
         }
     }
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: drive command state, task file and transfer buffer (the medium is not rolled back). */
+const char *
+mo_rmm_snap_blocked(void)
+{
+    for (int c = 0; c < MO_NUM; c++) {
+        if (mo_drives[c].bus_type == MO_BUS_USB)
+            return "a MO drive on the USB bus is attached (no snapshot support for it)";
+    }
+    return NULL;
+}
+
+void
+mo_rmm_snap(rmm_snap_t *s)
+{
+    for (int c = 0; c < MO_NUM; c++) {
+        mo_t  *dev = (mo_t *) mo_drives[c].priv;
+        void   *drv, *log;
+        ide_tf_t *tf;
+        uint8_t *buf;
+        size_t   sz;
+        uint32_t len;
+        int      own_tf;
+        uint8_t (*ven_cmd)(void *sc, uint8_t *cdb, int32_t *BufLen);
+
+        if ((mo_drives[c].bus_type == MO_BUS_DISABLED) || !dev)
+            continue;
+        drv     = dev->drv;
+        log     = dev->log;
+        tf      = dev->tf;
+        buf     = dev->buffer;
+        sz      = dev->buffer_sz;
+        ven_cmd = dev->ven_cmd;
+        len     = buf ? (uint32_t) sz : 0;
+        own_tf  = tf && ((mo_drives[c].bus_type == MO_BUS_SCSI) || (mo_drives[c].bus_type == MO_BUS_LPT));
+
+        rmm_snap_raw(s, dev, sizeof(mo_t));
+        RMM_SNAP_VAR(s, len);
+        dev->drv     = drv;
+        dev->log     = log;
+        dev->tf      = tf;
+        dev->ven_cmd = ven_cmd;
+        if (own_tf)
+            rmm_snap_raw(s, tf, sizeof(ide_tf_t));
+        if (!rmm_snap_restoring(s)) {
+            dev->buffer    = buf;
+            dev->buffer_sz = sz;
+            if (len)
+                rmm_snap_raw(s, buf, len);
+            continue;
+        }
+        if (!len) {
+            free(buf);
+            buf = NULL;
+            sz  = 0;
+        } else if (!buf || (sz < len)) {
+            uint8_t *nb = realloc(buf, len);
+
+            if (!nb)
+                fatal("RMM: out of memory restoring the MO buffer\n");
+            buf = nb;
+            sz  = len;
+        }
+        dev->buffer    = buf;
+        dev->buffer_sz = sz;
+        if (len)
+            rmm_snap_raw(s, buf, len);
+    }
+}
+#endif

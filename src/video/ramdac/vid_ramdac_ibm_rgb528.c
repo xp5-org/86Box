@@ -1161,3 +1161,14 @@ const device_t ibm_rgb528_ramdac_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. */
+void
+ibm_rgb528_ramdac_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ibm_rgb528_ramdac_t));
+}
+#endif

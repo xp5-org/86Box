@@ -103,6 +103,7 @@
 #include <86box/version.h>
 #include <86box/gdbstub.h>
 #include <86box/automation.h>
+#include <86box/rmm.h>
 #include <86box/machine_status.h>
 #include <86box/acpi.h>
 #include <86box/nv/vid_nv_rivatimer.h>
@@ -792,6 +793,10 @@ pc_show_usage(void)
 #endif
             "-L or --logfile path\t\t- set 'path' to be the logfile\n"
             "-M or --missing\t\t- dump missing machines and video cards\n"
+#ifdef USE_RMM
+            "--monitor-port port\t\t- listen for the remote monitor on 127.0.0.1:port\n"
+            "--monitor-sticky-pause\t- a pause the monitor client asked for survives its disconnect\n"
+#endif
             "-N or --noconfirm\t\t- do not ask for confirmation on quit\n"
             "-P or --vmpath path\t\t- set 'path' to be root for vm\n"
             "-O or --global path\t\t- set 'path' to be global config file\n"
@@ -970,6 +975,15 @@ usage:
             snprintf(automation_token_file, sizeof(automation_token_file), "%s", argv[++c]);
         } else if (!strcasecmp(argv[c], "--automation-allow-remote")) {
             automation_allow_remote = 1;
+#endif
+#ifdef USE_RMM
+        } else if (!strcasecmp(argv[c], "--monitor-port")) {
+            if ((c + 1) == argc)
+                goto usage;
+
+            rmm_port_cmdline = atoi(argv[++c]);
+        } else if (!strcasecmp(argv[c], "--monitor-sticky-pause")) {
+            rmm_sticky_cmdline = 1;
 #endif
         } else if (!strcasecmp(argv[c], "--fullscreen") || !strcasecmp(argv[c], "-F")) {
             start_in_fullscreen = 1;
@@ -1864,6 +1878,9 @@ pc_reset_hard_close(void)
 void
 pc_reset_hard_init(void)
 {
+    /* Config keys the remote monitor staged for next reset */
+    rmm_pending_reset_apply();
+
     /*
      * First, we reset the modules that are not part of
      * the actual machine, but which support some of the
@@ -2043,6 +2060,9 @@ pc_reset_hard_init(void)
     if (test_mode)
         pc_test_mode_entry_point();
 
+#ifdef USE_RMM
+    rmm_hard_resets++; /* the monitor waits on this */
+#endif
     ui_hard_reset_completed();
 }
 
@@ -2378,12 +2398,34 @@ do_pause(int p)
     if ((p == 1) && !old_p)
         do_pause_ack = p;
     dopause = !!p;
+#ifdef USE_RMM
+    /* The monitor thread waits for the pause ack in rmm_set_pause; spinning here
+       deadlocks against a queued blit. */
+    if (rmm_pause_nowait)
+        return;
+#endif
     if ((p == 1) && !old_p) {
         while (!ATOMIC_LOAD(pause_ack))
             ;
     }
     ATOMIC_STORE(pause_ack, 0);
 }
+
+#ifdef USE_RMM
+volatile int rmm_pause_nowait = 0;
+
+int
+rmm_pause_acked(void)
+{
+    return ATOMIC_LOAD(pause_ack);
+}
+
+void
+rmm_pause_ack_clear(void)
+{
+    ATOMIC_STORE(pause_ack, 0);
+}
+#endif
 
 // Helper to find an accelerator key and return it's index in acc_keys
 int FindAccelerator(const char *name) {

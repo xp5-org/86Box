@@ -1063,3 +1063,20 @@ const device_t inboard386_at_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card's registers, then the 64 KB BIOS shadow and 64 KB video shadow RAM.
+   The mappings and the read-only ROM snapshot stay live. */
+void
+inboard386_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    inboard386_t *dev = (inboard386_t *) priv;
+
+    rmm_snap_raw(s, &dev->is_xt, offsetof(inboard386_t, bios_shadow_mapping));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->bios_shadow_ram, 0x10000);
+    rmm_snap_raw(s, dev->video_shadow_ram, 0x10000);
+}
+#endif

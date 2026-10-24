@@ -696,3 +696,19 @@ const device_t ogc_device = {
     .force_redraw  = NULL,
     .config        = cga_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_olivetti_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ogc_t *dev = (ogc_t *) priv;
+    uint8_t *b0 = dev->cga.vram;
+
+    rmm_snap_raw(s, dev, sizeof(ogc_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x8000);
+}
+#endif

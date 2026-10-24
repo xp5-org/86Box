@@ -1953,3 +1953,65 @@ scsi_disk_close(void)
         }
     }
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: every SCSI-bus disk's command state, task file and transfer buffer. */
+void
+scsi_disk_rmm_snap(rmm_snap_t *s)
+{
+    for (int c = 0; c < HDD_NUM; c++) {
+        scsi_disk_t *dev = (scsi_disk_t *) hdd[c].priv;
+        hard_disk_t *drv;
+        ide_tf_t    *tf;
+        void        *log;
+        uint8_t     *buf;
+        size_t       sz;
+        uint32_t     len;
+        uint8_t    (*ven_cmd)(void *sc, uint8_t *cdb, int32_t *BufLen);
+
+        if ((hdd[c].bus_type != HDD_BUS_SCSI) || !dev)
+            continue;
+        drv     = dev->drv;
+        tf      = dev->tf;
+        log     = dev->log;
+        buf     = dev->temp_buffer;
+        sz      = dev->temp_buffer_sz;
+        ven_cmd = dev->ven_cmd;
+        len     = buf ? (uint32_t) sz : 0;
+
+        rmm_snap_raw(s, dev, sizeof(scsi_disk_t));
+        RMM_SNAP_VAR(s, len);
+        dev->drv     = drv;
+        dev->tf      = tf;
+        dev->log     = log;
+        dev->ven_cmd = ven_cmd;
+        if (tf)
+            rmm_snap_raw(s, tf, sizeof(ide_tf_t));
+        if (!rmm_snap_restoring(s)) {
+            dev->temp_buffer    = buf;
+            dev->temp_buffer_sz = sz;
+            if (len)
+                rmm_snap_raw(s, buf, len);
+            continue;
+        }
+        if (!len) {
+            free(buf);
+            buf = NULL;
+            sz  = 0;
+        } else if (!buf || (sz < len)) {
+            uint8_t *nb = realloc(buf, len);
+
+            if (!nb)
+                fatal("RMM: out of memory restoring the SCSI disk buffer\n");
+            buf = nb;
+            sz  = len;
+        }
+        dev->temp_buffer    = buf;
+        dev->temp_buffer_sz = sz;
+        if (len)
+            rmm_snap_raw(s, buf, len);
+    }
+}
+#endif

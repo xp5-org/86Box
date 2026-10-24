@@ -915,3 +915,14 @@ const device_t ide_cmd649_ter_qua_device = {
     .short_name    = "CMD 649",
     .ide_boards    = ide_boards_ter_qua
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_ide_cmd646_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(cmd646_t));
+}
+#endif

@@ -1169,3 +1169,22 @@ const device_t adgold_device = {
     .force_redraw  = NULL,
     .config        = adgold_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its YM7128 state. The host-stream position and MMA buffer are kept. */
+void
+snd_adlibgold_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    adgold_t *dev = (adgold_t *) priv;
+    unsigned char pos[sizeof(dev->pos)];
+    unsigned char buf[sizeof(dev->mma_buffer)];
+
+    memcpy(pos, &dev->pos, sizeof(pos));
+    memcpy(buf, dev->mma_buffer, sizeof(buf));
+    rmm_snap_raw(s, dev, sizeof(adgold_t));
+    memcpy(&dev->pos, pos, sizeof(pos));
+    memcpy(dev->mma_buffer, buf, sizeof(buf));
+}
+#endif

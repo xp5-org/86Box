@@ -349,3 +349,19 @@ const device_t opti283_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+opti283_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    opti283_t *dev = (opti283_t *) priv;
+    uint8_t save_mem_mappings[sizeof(dev->mem_mappings)];
+
+    memcpy(save_mem_mappings, &dev->mem_mappings, sizeof(dev->mem_mappings));
+    rmm_snap_raw(s, dev, sizeof(opti283_t));
+    memcpy(&dev->mem_mappings, save_mem_mappings, sizeof(dev->mem_mappings));
+}
+#endif

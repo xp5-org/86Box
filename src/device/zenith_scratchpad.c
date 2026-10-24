@@ -106,3 +106,17 @@ const device_t zenith_scratchpad_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the 16 KB scratchpad RAM. The mapping and the buffer stay live. */
+void
+zenith_scratchpad_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    zenith_t *dev = (zenith_t *) priv;
+
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->scratchpad_ram, 0x4000);
+}
+#endif

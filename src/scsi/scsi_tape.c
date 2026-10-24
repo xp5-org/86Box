@@ -3257,3 +3257,87 @@ tape_drive_mount(int i, const char *path, int read_only)
             return 0;
     }
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Save or restore one heap buffer by value: the length travels, the buffer is re-allocated on restore. */
+static void
+tape_rmm_heap(rmm_snap_t *s, uint8_t **bufp, size_t *lenp)
+{
+    uint8_t *buf = *bufp;
+    size_t   len = *lenp;
+    uint32_t n   = buf ? (uint32_t) len : 0;
+
+    RMM_SNAP_VAR(s, n);
+    if (!rmm_snap_restoring(s)) {
+        if (n)
+            rmm_snap_raw(s, buf, n);
+        return;
+    }
+    if (!n) {
+        free(buf);
+        *bufp  = NULL;
+        *lenp  = 0;
+        return;
+    }
+    if (!buf || (len < n)) {
+        uint8_t *nb = realloc(buf, n);
+
+        if (!nb)
+            fatal("RMM: out of memory restoring a tape buffer\n");
+        buf  = nb;
+        *lenp = n;
+    }
+    *bufp = buf;
+    rmm_snap_raw(s, buf, n);
+}
+
+/* Monitor snapshots: SCSI and ATAPI tape command state, task file (SCSI only; ATAPI shares the IDE
+   one), transfer buffer, re-blocking buffer and auxiliary partition buffer. The tape position is
+   saved, the image file (the medium) is not rolled back. FDC and LPT tapes keep their state elsewhere. */
+void
+tape_rmm_snap(rmm_snap_t *s)
+{
+    for (int c = 0; c < TAPE_NUM; c++) {
+        tape_t  *dev = (tape_t *) tape_drives[c].priv;
+        void    *drv, *log;
+        ide_tf_t *tf;
+        uint8_t *buf, *aux, *rec;
+        size_t   sz, aux_sz, rec_sz;
+        int      own_tf;
+        uint8_t (*ven_cmd)(void *sc, uint8_t *cdb, int32_t *BufLen);
+
+        if (!dev || ((tape_drives[c].bus_type != TAPE_BUS_SCSI) && (tape_drives[c].bus_type != TAPE_BUS_ATAPI)))
+            continue;
+        drv     = dev->drv;
+        log     = dev->log;
+        tf      = dev->tf;
+        buf     = dev->buffer;
+        sz      = dev->buffer_sz;
+        aux     = dev->aux_buf;
+        aux_sz  = dev->aux_buf_size;
+        rec     = dev->rec_buf;
+        rec_sz  = dev->rec_buf_size;
+        ven_cmd = dev->ven_cmd;
+        own_tf  = tf && (tape_drives[c].bus_type == TAPE_BUS_SCSI);
+
+        rmm_snap_raw(s, dev, sizeof(tape_t));
+        dev->drv     = drv;
+        dev->log     = log;
+        dev->tf      = tf;
+        dev->ven_cmd = ven_cmd;
+        dev->buffer  = buf;
+        dev->aux_buf = aux;
+        dev->rec_buf = rec;
+        if (own_tf)
+            rmm_snap_raw(s, tf, sizeof(ide_tf_t));
+        tape_rmm_heap(s, &dev->buffer, &sz);
+        tape_rmm_heap(s, &dev->aux_buf, &aux_sz);
+        tape_rmm_heap(s, &dev->rec_buf, &rec_sz);
+        dev->buffer_sz    = sz;
+        dev->aux_buf_size = (uint32_t) aux_sz;
+        dev->rec_buf_size = (uint32_t) rec_sz;
+    }
+}
+#endif

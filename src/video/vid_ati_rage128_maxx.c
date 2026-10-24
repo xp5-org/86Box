@@ -404,3 +404,14 @@ const device_t ati_rage128_maxx_device = {
     .force_redraw  = maxx_force_redraw,
     .config        = rage128_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+vid_ati_rage128_maxx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(r128_maxx_t));
+}
+#endif

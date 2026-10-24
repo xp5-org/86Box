@@ -969,3 +969,26 @@ const device_t ac97_via_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; each SGD's host-stream pos/buffer are kept (releasenotes.txt). */
+void
+ac97_via_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ac97_via_t *dev = (ac97_via_t *) priv;
+    int         pos[6];
+    int32_t     buf[6][SOUNDBUFLEN * 2];
+
+    for (int i = 0; i < 6; i++) {
+        pos[i] = dev->sgd[i].pos;
+        memcpy(buf[i], dev->sgd[i].buffer, sizeof(buf[i]));
+    }
+    rmm_snap_raw(s, dev, sizeof(ac97_via_t));
+    for (int i = 0; i < 6; i++) {
+        dev->sgd[i].pos = pos[i];
+        memcpy(dev->sgd[i].buffer, buf[i], sizeof(buf[i]));
+    }
+}
+#endif

@@ -124,3 +124,14 @@ const device_t novell_keycard_device = {
     .force_redraw  = NULL,
     .config        = keycard_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+novell_cardkey_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(novell_cardkey_t));
+}
+#endif

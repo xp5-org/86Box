@@ -2387,3 +2387,17 @@ emu8k_close(emu8k_t *emu8k)
     if (emu8k->ram)
         free(emu8k->ram);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the on-board sample RAM, by value. The ROM is constant. */
+void
+emu8k_rmm_snap_ram(rmm_snap_t *s, emu8k_t *emu8k)
+{
+    if (emu8k->ram && emu8k->ram_end_addr > EMU8K_RAM_MEM_START) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, emu8k->ram, (emu8k->ram_end_addr - EMU8K_RAM_MEM_START) << 1);
+    }
+}
+#endif

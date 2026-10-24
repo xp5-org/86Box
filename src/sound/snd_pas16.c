@@ -3830,3 +3830,30 @@ const device_t pas16d_device = {
     .short_name    = "PAS16D",
     .scsi_buses    = pas16_scsi_buses
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card struct, with the host-stream pos/buffer (its own and the DSP's) kept, then its MPU-401. The PIT and the T128 SCSI are separate devices. */
+void
+pas16_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    pas16_t *dev = (pas16_t *) priv;
+    mpu_t   *mpu = dev->mpu;
+    int      pos = dev->pos;
+    int      dsp_pos = dev->dsp.pos;
+    int32_t  pcm[2][SOUNDBUFLEN * 2];
+    int16_t  dsp_buf[SOUNDBUFLEN * 2];
+
+    memcpy(pcm, dev->pcm_buffer, sizeof(pcm));
+    memcpy(dsp_buf, dev->dsp.buffer, sizeof(dsp_buf));
+    rmm_snap_raw(s, dev, sizeof(pas16_t));
+    dev->mpu     = mpu;
+    dev->pos     = pos;
+    dev->dsp.pos = dsp_pos;
+    memcpy(dev->pcm_buffer, pcm, sizeof(pcm));
+    memcpy(dev->dsp.buffer, dsp_buf, sizeof(dsp_buf));
+    if (mpu)
+        rmm_snap_raw(s, mpu, sizeof(mpu_t));
+}
+#endif

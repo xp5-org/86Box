@@ -1106,3 +1106,14 @@ const device_t pdc20269_device = {
     .ide_boards    = ide_boards_pci_card
 };
 
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_ide_pdc202xx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(pdc_t));
+}
+#endif

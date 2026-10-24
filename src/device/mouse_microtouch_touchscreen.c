@@ -936,3 +936,23 @@ const device_t mouse_mtouch_device = {
     .force_redraw  = NULL,
     .config        = mtouch_config
 };
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct, the NVR image and the response FIFO's heap buffer by value (their pointers are kept). */
+void
+mouse_microtouch_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mouse_microtouch_t *dev  = (mouse_microtouch_t *) priv;
+    uint8_t            *nvr  = dev->nvr;
+    uint8_t            *data = dev->resp.data;
+
+    rmm_snap_raw(s, dev, sizeof(mouse_microtouch_t));
+    dev->nvr       = nvr;
+    dev->resp.data = data;
+    if (nvr)
+        rmm_snap_raw(s, nvr, NVR_SIZE);
+    if (data)
+        rmm_snap_raw(s, data, dev->resp.capacity);
+}
+#endif

@@ -5212,3 +5212,35 @@ ibm8514_device_add(void)
     else
         device_add(&gen8514_isa_device);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the 8514/A engine state and its VRAM by value. */
+void
+ibm8514_rmm_snap_state(rmm_snap_t *s, ibm8514_t *dev)
+{
+    rmm_snap_raw(s, dev, sizeof(ibm8514_t));
+    /* The Mach32 has no VRAM of its own for the engine: it draws into its SVGA's, which that card's visitor saves. */
+    if (!dev->vram)
+        return;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->vram, dev->vram_size);
+    if (rmm_snap_restoring(s) && dev->changedvram)
+        memset(dev->changedvram, changeframecount, (dev->vram_size >> 12) + 1);
+}
+
+/* Monitor snapshots: the 8514/A add-on of the primary VGA. priv is that card's svga, which its
+   own visitor saves; this saves the engine and, for the ATI flavour, its mach_t. */
+void
+ibm8514_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    svga_t *svga = (svga_t *) priv;
+
+    if (!svga || !svga->dev8514)
+        return;
+    ibm8514_rmm_snap_state(s, svga->dev8514);
+    if (svga->ext8514)
+        rmm_snap_raw(s, svga->ext8514, sizeof(mach_t));
+}
+#endif

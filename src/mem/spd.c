@@ -606,3 +606,23 @@ static const device_t spd_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: every populated module's SPD image. */
+static void
+spd_rmm_snap(rmm_snap_t *s, UNUSED(void *priv))
+{
+    for (uint8_t i = 0; i < SPD_MAX_SLOTS; i++)
+        if (spd_modules[i])
+            rmm_snap_raw(s, spd_modules[i], sizeof(spd_t));
+}
+
+/* The visitor for the SPD device. */
+rmm_snap_fn
+spd_rmm_snap_fn(const device_t *dev)
+{
+    return (dev == &spd_device) ? spd_rmm_snap : NULL;
+}
+#endif

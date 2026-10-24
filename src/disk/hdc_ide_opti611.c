@@ -363,3 +363,14 @@ const device_t ide_opti611_vlb_sec_device = {
     .short_name    = "OPTi 611",
     .ide_boards    = ide_boards_primary
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_ide_opti611_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(opti611_t));
+}
+#endif

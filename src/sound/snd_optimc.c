@@ -1545,3 +1545,27 @@ const device_t opti_82c931_device = {
     .short_name    = "OPTi 82C931",
     .ide_boards    = ide_boards_quaternary
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card struct with its ad1848 (play FIFO), then the card's own SB and MPU-401. Pointers and the host-stream pos/buffer are kept. */
+void
+optimc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    optimc_t *dev = (optimc_t *) priv;
+    sb_t     *sb  = dev->sb;
+    mpu_t    *mpu = dev->mpu;
+
+    if (dev->ad1848.play_fifo)
+        ad1848_rmm_snap_embedded(s, &dev->ad1848, dev, sizeof(optimc_t));
+    else
+        rmm_snap_raw(s, dev, sizeof(optimc_t));
+    dev->sb  = sb;
+    dev->mpu = mpu;
+    if (sb)
+        sb16_rmm_snap(s, sb);
+    if (mpu && (!sb || mpu != sb->mpu))
+        rmm_snap_raw(s, mpu, sizeof(mpu_t));
+}
+#endif

@@ -3179,3 +3179,22 @@ const device_t kbc_at_vectra_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the controller and both of its port mailboxes. */
+void
+kbc_at_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    atkbc_t *dev = (atkbc_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(atkbc_t));
+    for (int i = 0; i < 2; i++)
+        if (kbc_at_ports[i])
+            rmm_snap_raw(s, kbc_at_ports[i], sizeof(kbc_at_port_t));
+    RMM_SNAP_VAR(s, fast_reset);
+    /* AMI/SiS command CB and the T3100e's B7/B8 switch it at run time. */
+    RMM_SNAP_VAR(s, kbc_at_do_poll);
+}
+#endif

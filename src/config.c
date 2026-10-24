@@ -90,6 +90,7 @@
 #include <86box/ui.h>
 #include <86box/snd_opl.h>
 #include <86box/version.h>
+#include <86box/rmm.h>
 #include <86box/plat_floppy_ioctl.h>
 #include <86box/vfio.h>
 
@@ -398,6 +399,12 @@ load_general(void)
         strncpy(uuid, "", sizeof(uuid) - 1);
 
     gdbstub_port = ini_section_get_int(cat, "gdbstub_port", 12345);
+#ifdef USE_RMM
+    rmm_port             = ini_section_get_int(cat, "rmm_port", 0);
+    rmm_pause_on_connect = ini_section_get_int(cat, "rmm_pause_on_connect", 1);
+    rmm_sticky_pause     = ini_section_get_int(cat, "rmm_sticky_pause", 0);
+    rmm_disk_track       = ini_section_get_int(cat, "rmm_disk_track", 0);
+#endif
 }
 
 /* Load monitor section. */
@@ -3373,6 +3380,28 @@ save_general(void)
     else
         ini_section_set_int(cat, "gdbstub_port", gdbstub_port);
 
+#ifdef USE_RMM
+    if (rmm_port == 0)
+        ini_section_delete_var(cat, "rmm_port");
+    else
+        ini_section_set_int(cat, "rmm_port", rmm_port);
+
+    if (rmm_pause_on_connect == 1)
+        ini_section_delete_var(cat, "rmm_pause_on_connect");
+    else
+        ini_section_set_int(cat, "rmm_pause_on_connect", rmm_pause_on_connect);
+
+    if (rmm_sticky_pause == 0)
+        ini_section_delete_var(cat, "rmm_sticky_pause");
+    else
+        ini_section_set_int(cat, "rmm_sticky_pause", rmm_sticky_pause);
+
+    if (rmm_disk_track == 0)
+        ini_section_delete_var(cat, "rmm_disk_track");
+    else
+        ini_section_set_int(cat, "rmm_disk_track", rmm_disk_track);
+#endif
+
     ini_delete_section_if_empty(config, cat);
 }
 
@@ -4838,3 +4867,27 @@ config_get_ini(void)
 {
     return config;
 }
+
+#ifdef USE_RMM
+/* config.load: re-read the rewritten VM cfg into the globals. Called by
+   rmm_pending_reset_apply(). */
+void
+config_rmm_reload(void)
+{
+    if (config)
+        ini_close(config);
+    config = NULL;
+    config_load();
+}
+
+/* ini_foreach() over the running cfg under config_mutex. */
+void
+config_rmm_foreach(void (*cb)(const char *section, const char *key, const char *value, void *priv), void *priv)
+{
+    if (config_mutex)
+        thread_wait_mutex(config_mutex);
+    ini_foreach(config, cb, priv);
+    if (config_mutex)
+        thread_release_mutex(config_mutex);
+}
+#endif

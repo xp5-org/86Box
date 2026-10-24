@@ -1110,3 +1110,19 @@ const device_t v6355d_device = {
     .config        = v6355_config,
     .alias         = "Tulip DGA"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_v6355_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    v6355_t *dev = (v6355_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(v6355_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x4000);
+}
+#endif

@@ -1002,3 +1002,14 @@ const device_t esdi_at_wd1007vse1_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: controller state, copied back in place. */
+void
+esdi_at_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(esdi_t));
+}
+#endif

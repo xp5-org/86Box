@@ -754,3 +754,24 @@ machine_europc_init(const machine_t *model)
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the JIM registers and the clock chip state (a file static). The NVR file name and hooks stay as they are. */
+void
+europc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    nvr_t keep;
+
+    (void) priv;
+    keep = europc.nvr;
+    rmm_snap_raw(s, &europc, sizeof(europc));
+    europc.nvr.fn         = keep.fn;
+    europc.nvr.reset      = keep.reset;
+    europc.nvr.start      = keep.start;
+    europc.nvr.tick       = keep.tick;
+    europc.nvr.size       = keep.size;
+    europc.nvr.data       = keep.data;
+}
+#endif

@@ -572,3 +572,15 @@ const device_t char_pipe_lpt_device = {
     .force_redraw  = NULL,
     .config        = char_pipe_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* No guest state here; UART state is saved by serial_rmm_snap. */
+void
+char_pipe_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    (void) s;
+    (void) priv;
+}
+#endif

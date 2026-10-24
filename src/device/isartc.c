@@ -376,7 +376,7 @@ mm67_time_set(nvr_t *nvr, struct tm *tm)
         else
             regs[dev->year] = year % 100;
 
-        if (!(dev->flags & FLAG_YEAR80)) {
+        if ((dev->century != -1) && !(dev->flags & FLAG_YEAR80)) {
             if (dev->flags & FLAG_YEARBCD)
                 regs[dev->century] = RTC_BCD((year + 1900) / 100);
             else
@@ -1694,3 +1694,34 @@ isartc_has_config(int board)
 
     return (boards[board].dev->config ? 1 : 0);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: one rtcdev_t per board, copied back in place. */
+static void
+isartc_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(rtcdev_t));
+}
+
+static void
+rp5c01a_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(rp5c01a_t));
+}
+
+/* Visitor for this file's devices, NULL if not one of them. */
+rmm_snap_fn
+isartc_rmm_snap_fn(const device_t *dev)
+{
+    if (dev == &rp5c01a_zenith_device)
+        return rp5c01a_rmm_snap;
+    if ((dev == &vendex_xt_rtc_onboard_device) || (dev == &rtc58167_device) || (dev == &ibmps2m30_rtc_device))
+        return isartc_rmm_snap;
+    for (int c = 1; boards[c].dev; c++)
+        if (boards[c].dev == dev)
+            return isartc_rmm_snap;
+    return NULL;
+}
+#endif

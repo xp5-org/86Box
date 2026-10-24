@@ -218,3 +218,21 @@ const device_t saaym_device = {
     .force_redraw  = NULL,
     .config        = saaym_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct, with the host-stream pos/buffer of its SAA1099 pair kept (releasenotes.txt). The OPM is a device with its own visitor. */
+void
+saaym_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    saaym_t *dev     = (saaym_t *) priv;
+    uint16_t cms_pos = dev->cms.pos;
+    int16_t  buf[SOUNDBUFLEN * 2];
+
+    memcpy(buf, dev->cms.buffer, sizeof(buf));
+    rmm_snap_raw(s, dev, sizeof(saaym_t));
+    dev->cms.pos = cms_pos;
+    memcpy(dev->cms.buffer, buf, sizeof(buf));
+}
+#endif

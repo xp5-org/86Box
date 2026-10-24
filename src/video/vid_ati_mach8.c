@@ -9868,3 +9868,19 @@ const device_t mach32_onboard_pci_device = {
     .force_redraw  = mach_force_redraw,
     .config        = mach32_pci_onboard_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole mach_t, the VGA VRAM, then the 8514/A engine and its VRAM. */
+void
+mach8_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mach_t *mach = (mach_t *) priv;
+
+    rmm_snap_raw(s, mach, sizeof(mach_t));
+    svga_rmm_snap_vram(s, &mach->svga);
+    if (mach->svga.dev8514)
+        ibm8514_rmm_snap_state(s, mach->svga.dev8514);
+}
+#endif

@@ -1822,3 +1822,14 @@ const device_t dec_tulip_21040_device = {
     .alias         = "DEC DE-435 EtherWorks Turbo",
     .config        = dec_tulip_21143_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; the host link and EEPROM are pointers that stay valid within this process. */
+void
+net_tulip_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(TULIPState));
+}
+#endif

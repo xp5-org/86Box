@@ -911,3 +911,14 @@ const device_t pe3_device = {
     .force_redraw  = NULL,
     .config        = pe3_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+net_pe3_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(pe3_t));
+}
+#endif

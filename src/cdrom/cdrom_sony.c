@@ -732,3 +732,14 @@ const device_t sony_cdu31a_device = {
 const device_t sony_creative_device = {
     .name = "SONY/Creative interface", .internal_name = "sony_creative", .flags = DEVICE_ISA, .local = 1, .init = sony_init, .close = sony_close, .reset = sony_reset, .config = sony_creative_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole interface and drive state. */
+void
+sony_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(sony_cdrom_t));
+}
+#endif

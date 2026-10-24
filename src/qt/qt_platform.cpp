@@ -50,9 +50,12 @@
 #include <QElapsedTimer>
 
 #include <QScreen>
+#include <QAction>
 
 #include "qt_rendererstack.hpp"
 #include "qt_mainwindow.hpp"
+#include "qt_machinestatus.hpp"
+#include "qt_mediamenu.hpp"
 #include "qt_preferences.hpp"
 #include "qt_util.hpp"
 
@@ -158,6 +161,7 @@ extern "C" {
 #endif
 
 #include "../cpu/cpu.h"
+#include <86box/rmm.h>
 #include <86box/plat.h>
 
 volatile int cpu_thread_run  = 1;
@@ -801,6 +805,90 @@ plat_pause(int p)
 #endif
 }
 
+#ifdef USE_RMM
+extern volatile int rmm_pause_applied;
+extern volatile int rmm_pause_nowait;
+
+/* Runs plat_pause() on the UI thread for the monitor thread. */
+void
+plat_pause_async(int p)
+{
+    QMetaObject::invokeMethod(qApp, [p] {
+        rmm_pause_nowait = 1; /* do_pause() must not spin on the CPU ack */
+        plat_pause(p);
+        rmm_pause_nowait = 0;
+        rmm_pause_applied = p;
+    }, Qt::QueuedConnection);
+}
+
+/* Trigger a main-window QAction by object name on the UI thread.
+   1 triggered, 0 no such action, -1 disabled. */
+int
+plat_rmm_trigger_action(const char *name)
+{
+    int ret = 0;
+
+    QMetaObject::invokeMethod(qApp, [name, &ret] {
+        auto *a = main_window ? main_window->findChild<QAction *>(QString(name)) : nullptr;
+        if (!a)
+            ret = 0;
+        else if (!a->isEnabled())
+            ret = -1;
+        else {
+            a->trigger();
+            ret = 1;
+        }
+    }, Qt::BlockingQueuedConnection);
+    return ret;
+}
+
+/* Removable-media slots the machine has. dev 0 floppy, 1 CD-ROM. Returns the count. */
+int
+plat_rmm_media_slots(int dev, int *out, int max)
+{
+    int n = 0;
+
+    QMetaObject::invokeMethod(qApp, [dev, out, max, &n] {
+        auto add = [out, max, &n](int i) { if (n < max) out[n++] = i; };
+        if (dev == 0)
+            MachineStatus::iterateFDD(add);
+        else if (dev == 1)
+            MachineStatus::iterateCDROM(add);
+    }, Qt::BlockingQueuedConnection);
+    return n;
+}
+
+/* Insert a path, or eject on NULL, through the media menu on the UI thread. */
+void
+plat_rmm_media(int dev, int slot, const char *path, int wp)
+{
+    QString qpath = path ? QString::fromUtf8(path) : QString();
+
+    QMetaObject::invokeMethod(qApp, [dev, slot, qpath, path, wp] {
+        if (!MediaMenu::ptr)
+            return;
+        if (dev == 0) {
+            if (path)
+                MediaMenu::ptr->floppyMount(slot, qpath, wp);
+            else
+                MediaMenu::ptr->floppyEject(slot);
+        } else if (dev == 1) {
+            if (path)
+                MediaMenu::ptr->cdromMount(slot, qpath);
+            else
+                MediaMenu::ptr->cdromEject(slot);
+        }
+    }, Qt::BlockingQueuedConnection);
+}
+
+/* machine.quit: power off without confirmation. */
+void
+plat_rmm_quit(void)
+{
+    QMetaObject::invokeMethod(qApp, [] { plat_power_off(); }, Qt::QueuedConnection);
+}
+#endif
+
 void
 plat_power_off(void)
 {
@@ -1248,6 +1336,7 @@ plat_set_thread_name(void *thread, const char *name)
     char truncated[16];
 #    endif
     strncpy(truncated, name, sizeof(truncated) - 1);
+    truncated[sizeof(truncated) - 1] = '\0'; /* strncpy does not terminate a name that fills it */
 #    ifdef Q_OS_DARWIN
     pthread_setname_np(truncated);
 #    elif defined(Q_OS_NETBSD)

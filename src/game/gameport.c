@@ -186,6 +186,13 @@ int             gameport_instance_id = 0;
    or writes, and ports at the standard 200h location are prioritized. */
 static gameport_t *active_gameports = NULL;
 
+/* The address of the game port that answers, 0 when none does. */
+uint16_t
+gameport_get_active_addr(void)
+{
+    return active_gameports ? active_gameports->addr : 0;
+}
+
 const char *
 joystick_get_name(int js)
 {
@@ -902,3 +909,19 @@ gameport_get_from_internal_name(const char *str)
 
     return 0;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the port and joystick axis timers. */
+void
+gameport_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    gameport_t *dev = (gameport_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(gameport_t));
+    RMM_SNAP_VAR(s, active_gameports);
+    if (dev->joystick)
+        rmm_snap_raw(s, dev->joystick, sizeof(joystick_instance_t));
+}
+#endif

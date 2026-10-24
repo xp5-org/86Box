@@ -760,3 +760,19 @@ const device_t ali6117d_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+ali6117_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ali6117_t *dev = (ali6117_t *) priv;
+    uint8_t save_ram_mapping[sizeof(dev->ram_mapping)];
+
+    memcpy(save_ram_mapping, &dev->ram_mapping, sizeof(dev->ram_mapping));
+    rmm_snap_raw(s, dev, sizeof(ali6117_t));
+    memcpy(&dev->ram_mapping, save_ram_mapping, sizeof(dev->ram_mapping));
+}
+#endif

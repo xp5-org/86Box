@@ -1761,3 +1761,18 @@ const device_t aha1640_device = {
     .config        = NULL,
     .short_name    = "AHA-1640"
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: x54x core and EEPROM image, copied back in place. */
+void
+aha_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    x54x_t *dev = (x54x_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(x54x_t));
+    if (dev->nvr)
+        rmm_snap_raw(s, dev->nvr, NVR_SIZE);
+}
+#endif

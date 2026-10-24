@@ -1006,3 +1006,19 @@ const device_t wy700_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_wy700_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    wy700_t *dev = (wy700_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(wy700_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x20000);
+}
+#endif

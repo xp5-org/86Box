@@ -725,3 +725,26 @@ ibm5140_video_load(ibm5140_video_t *video, FILE *file)
     free(sram);
     return 1;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the controller with its VRAM, font SRAM and per-pel LCD levels. The CRT
+   adapter of the CRT models is a CGA device with its own row. */
+static void
+ibm5140_lcd_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ibm5140_video_t *video = (ibm5140_video_t *) priv;
+    cga_t           *crt   = video->crt;
+
+    rmm_snap_raw(s, video, sizeof(ibm5140_video_t));
+    video->crt = crt;
+}
+
+/* The device is private to this file. */
+rmm_snap_fn
+ibm5140_lcd_rmm_snap_fn(const device_t *dev)
+{
+    return (dev == &lcd_device) ? ibm5140_lcd_rmm_snap : NULL;
+}
+#endif

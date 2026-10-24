@@ -261,3 +261,14 @@ const device_t port_6x_olivetti_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+void
+port_6x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(port_6x_t));
+    RMM_SNAP_VAR(s, cycles_sub);
+}
+#endif

@@ -639,3 +639,15 @@ const device_t unittester_device = {
     .force_redraw  = NULL,
     .config        = unittester_config,
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the tester's state machines and command state (a file static). */
+void
+unittester_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    (void) priv;
+    rmm_snap_raw(s, &unittester, sizeof(unittester));
+}
+#endif

@@ -47,6 +47,7 @@
 #include <86box/video.h>
 #include <86box/vid_svga.h>
 #include <86box/automation.h>
+#include <86box/rmm.h>
 
 #include <minitrace/minitrace.h>
 
@@ -414,6 +415,98 @@ video_transform_copy(void *__restrict _Dst, const void *__restrict _Src, size_t 
     return _Dst;
 }
 
+#ifdef USE_RMM
+/* capture.screenshot: copy of monitor 0's last frame, taken on the blitter thread.
+   Guarded by rmm_cap_lock. */
+static mutex_t          *rmm_cap_lock = NULL;
+static volatile int      rmm_cap_want = 0;
+static volatile uint32_t rmm_cap_seq  = 0;
+static uint32_t         *rmm_cap_buf  = NULL;
+static int               rmm_cap_size = 0; /* pixels allocated */
+static int               rmm_cap_w    = 0;
+static int               rmm_cap_h    = 0;
+
+/* Called with rmm_cap_lock held. */
+static void
+rmm_cap_copy(int x, int y, int w, int h)
+{
+    const bitmap_t *b = monitors[0].target_buffer;
+
+    if (!b || (w <= 0) || (h <= 0) || (x < 0) || (y < 0) || ((x + w) > 2048) || ((y + h) > 2048))
+        return;
+    if ((w * h) > rmm_cap_size) {
+        uint32_t *n = realloc(rmm_cap_buf, (size_t) w * h * sizeof(uint32_t));
+        if (!n)
+            return;
+        rmm_cap_buf  = n;
+        rmm_cap_size = w * h;
+    }
+    for (int r = 0; r < h; r++)
+        memcpy(&rmm_cap_buf[r * w], &b->line[y + r][x], (size_t) w * sizeof(uint32_t));
+    rmm_cap_w = w;
+    rmm_cap_h = h;
+    rmm_cap_seq++;
+}
+
+static void
+rmm_cap_blit(const blit_data_t *data)
+{
+    if (!rmm_cap_want || !rmm_cap_lock || (data->monitor_index != 0))
+        return;
+    thread_wait_mutex(rmm_cap_lock);
+    if (rmm_cap_want) {
+        rmm_cap_copy(data->x, data->y, data->w, data->h);
+        rmm_cap_want = 0;
+    }
+    thread_release_mutex(rmm_cap_lock);
+}
+
+void
+video_rmm_capture_init(void)
+{
+    if (!rmm_cap_lock)
+        rmm_cap_lock = thread_create_mutex();
+}
+
+/* Monitor thread. Waits up to timeout_ms for a fresh frame, else copies the last one.
+   On 1, rmm_cap_lock is held until video_rmm_capture_release(). */
+int
+video_rmm_capture(const uint32_t **buf, int *w, int *h, uint32_t *seq, int *fresh, int timeout_ms)
+{
+    const uint32_t before = rmm_cap_seq;
+
+    if (!rmm_cap_lock)
+        return 0;
+    rmm_cap_want = 1;
+    for (int t = 0; (rmm_cap_seq == before) && (t < timeout_ms); t += 5)
+        plat_delay_ms(5);
+
+    thread_wait_mutex(rmm_cap_lock);
+    rmm_cap_want = 0;
+    *fresh       = (rmm_cap_seq != before);
+    if (!*fresh) {
+        const blit_data_t *d = monitors[0].mon_blit_data_ptr;
+        if (d)
+            rmm_cap_copy(d->x, d->y, d->w, d->h);
+    }
+    if (!rmm_cap_buf || (rmm_cap_w <= 0) || (rmm_cap_h <= 0)) {
+        thread_release_mutex(rmm_cap_lock);
+        return 0;
+    }
+    *buf = rmm_cap_buf;
+    *w   = rmm_cap_w;
+    *h   = rmm_cap_h;
+    *seq = rmm_cap_seq;
+    return 1;
+}
+
+void
+video_rmm_capture_release(void)
+{
+    thread_release_mutex(rmm_cap_lock);
+}
+#endif
+
 static void
 blit_thread(void *param)
 {
@@ -429,6 +522,9 @@ blit_thread(void *param)
         thread_reset_event(data->wake_blit_thread);
         MTR_BEGIN("video", "blit_thread");
 
+#ifdef USE_RMM
+        rmm_cap_blit(data);
+#endif
         if (blit_func)
             blit_func(data->x, data->y, data->w, data->h, data->monitor_index);
 

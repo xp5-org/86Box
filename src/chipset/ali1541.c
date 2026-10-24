@@ -863,3 +863,22 @@ const device_t ali1541_rowdecode_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+ali1541_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ali1541_t *dev = (ali1541_t *) priv;
+    uint8_t save_row_low_mapping[sizeof(dev->row_low_mapping)];
+    uint8_t save_row_high_mapping[sizeof(dev->row_high_mapping)];
+
+    memcpy(save_row_low_mapping, &dev->row_low_mapping, sizeof(dev->row_low_mapping));
+    memcpy(save_row_high_mapping, &dev->row_high_mapping, sizeof(dev->row_high_mapping));
+    rmm_snap_raw(s, dev, sizeof(ali1541_t));
+    memcpy(&dev->row_low_mapping, save_row_low_mapping, sizeof(dev->row_low_mapping));
+    memcpy(&dev->row_high_mapping, save_row_high_mapping, sizeof(dev->row_high_mapping));
+}
+#endif

@@ -716,3 +716,19 @@ const device_t t3100e_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_cga_toshiba_t3100e_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    t3100e_t *dev = (t3100e_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(t3100e_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x8000);
+}
+#endif

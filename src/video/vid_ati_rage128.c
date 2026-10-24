@@ -2845,3 +2845,32 @@ const device_t ati_xpert128_pci_device = {
     .config        = rage128_config
 };
 /* clang-format on */
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: register state, SVGA core and VRAM. The CCE executor and
+   raster workers are drained first. See releasenotes.txt. */
+void
+rage128_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rage128_t *dev  = (rage128_t *) priv;
+    svga_t    *svga = &dev->svga;
+
+    /* Requeue the head of a packet the drain aborted. */
+    dev->cce_resume_n = 0;
+    atomic_store(&dev->cce_snap_keep, !rmm_snap_restoring(s));
+    rage128_pm4_drain_wait(dev);
+    atomic_store(&dev->cce_snap_keep, 0);
+    rage128_raster_flush(dev);
+
+    rmm_snap_raw(s, dev, sizeof(rage128_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, svga->vram, dev->vram_size);
+    if (rmm_snap_restoring(s)) {
+        memset(svga->changedvram, changeframecount, (dev->vram_size >> 12) + 1);
+        svga->fullchange = changeframecount;
+    }
+    rage128_pm4_resume_requeue(dev);
+}
+#endif

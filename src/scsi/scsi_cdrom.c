@@ -4672,3 +4672,47 @@ scsi_cdrom_drive_reset(const int c)
     if (valid)
         scsi_cdrom_init(dev);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: drive command state and data buffer. */
+void
+scsi_cdrom_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    scsi_cdrom_t *dev = (scsi_cdrom_t *) priv;
+    uint8_t      *buf = dev->buffer;
+    size_t        sz  = dev->buffer_sz;
+    uint32_t      len = buf ? (uint32_t) sz : 0;
+
+    ide_tf_t     *tf  = dev->tf;
+    int           own = tf && dev->drv && ((dev->drv->bus_type == CDROM_BUS_SCSI) || (dev->drv->bus_type == CDROM_BUS_LPT));
+
+    rmm_snap_raw(s, dev, sizeof(scsi_cdrom_t));
+    dev->tf = tf;
+    if (own)
+        rmm_snap_raw(s, tf, sizeof(ide_tf_t));
+    RMM_SNAP_VAR(s, len);
+    if (!rmm_snap_restoring(s)) {
+        if (len)
+            rmm_snap_raw(s, buf, len);
+        return;
+    }
+    if (!len) {
+        free(buf);
+        buf = NULL;
+        sz  = 0;
+    } else if (!buf || (sz < len)) {
+        uint8_t *nb = realloc(buf, len);
+
+        if (!nb)
+            fatal("RMM: out of memory restoring the CD-ROM buffer\n");
+        buf = nb;
+        sz  = len;
+    }
+    dev->buffer    = buf;
+    dev->buffer_sz = sz;
+    if (len)
+        rmm_snap_raw(s, buf, len);
+}
+#endif

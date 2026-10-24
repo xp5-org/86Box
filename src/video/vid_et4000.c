@@ -1143,3 +1143,17 @@ const device_t et4000_mca_device = {
     .force_redraw  = et4000_force_redraw,
     .config        = et4000_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_et4000_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    et4000_t *dev = (et4000_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(et4000_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

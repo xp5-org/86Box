@@ -635,3 +635,19 @@ const device_t f82c425_video_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the adapter registers and its video RAM. */
+void
+vid_f82c425_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    f82c425_t *dev = (f82c425_t *) priv;
+    uint8_t *b0 = dev->vram;
+
+    rmm_snap_raw(s, dev, sizeof(f82c425_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, b0, 0x4000);
+}
+#endif

@@ -4311,3 +4311,17 @@ const device_t tgui9680_pci_device = {
     .force_redraw  = tgui_force_redraw,
     .config        = tgui96xx_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_tgui9440_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    tgui_t *dev = (tgui_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(tgui_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

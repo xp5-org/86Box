@@ -23,6 +23,7 @@
  */
 #include <stdarg.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1657,3 +1658,94 @@ img_load_raw_device(void *priv, const char *device_path)
 
     drv->local = NULL;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Why this drive's image cannot be snapshotted, or NULL. */
+const char *
+img_rmm_snap_blocked(fdd_drive_t *drv)
+{
+    const img_t *dev = (img_t *) drv->local;
+
+    if (dev && dev->disk_at_once)
+        return "a compressed floppy image is mounted (its data lives only in memory, not covered yet)";
+    if (dev && dev->is_ioctl)
+        return "a host floppy drive is mounted";
+    return NULL;
+}
+
+/* Snapshot file: the medium. Writable images are stored; write-protected ones must match. */
+void
+img_rmm_snap_ident(fdd_drive_t *drv, int d, char *out, size_t n)
+{
+    const img_t *dev  = (img_t *) drv->local;
+    size_t       used = strlen(out);
+    uint64_t     len  = 0;
+    uint64_t     h    = 0;
+
+    if (!dev) {
+        snprintf(out + used, n - used, "fdd %d empty\n", d);
+        return;
+    }
+    if (!fseek(dev->fp, 0, SEEK_END))
+        len = (uint64_t) ftell(dev->fp);
+    if (drv->writeprot && len) {
+        uint8_t buf[16384];
+        size_t  k;
+
+        fseek(dev->fp, 0, SEEK_SET);
+        while ((k = fread(buf, 1, sizeof(buf), dev->fp)) > 0)
+            h = rmm_snap_hash(h, buf, k);
+    }
+    snprintf(out + used, n - used, "fdd %d raw %" PRIu64 " %s %016" PRIx64 "\n", d, len,
+             drv->writeprot ? "ro" : "rw", h);
+}
+
+/* Monitor snapshots: track cache and the medium. A written-to image is restored if it differs. */
+void
+img_rmm_snap(rmm_snap_t *s, fdd_drive_t *drv)
+{
+    img_t   *dev = (img_t *) drv->local;
+    uint32_t len = 0;
+    uint8_t *buf;
+
+    if (!dev)
+        return;
+    rmm_snap_raw(s, dev, sizeof(img_t));
+
+    if (!rmm_snap_restoring(s)) {
+        if (!drv->writeprot && !fseek(dev->fp, 0, SEEK_END))
+            len = (uint32_t) ftell(dev->fp);
+        RMM_SNAP_VAR(s, len);
+        if (len) {
+            buf = (uint8_t *) calloc(1, len);
+            fseek(dev->fp, 0, SEEK_SET);
+            if (fread(buf, 1, len, dev->fp) != len)
+                fatal("RMM: could not read floppy image %s for a snapshot\n", drv->image_path);
+            rmm_snap_data(s);
+            rmm_snap_raw(s, buf, len);
+            free(buf);
+        }
+        return;
+    }
+    RMM_SNAP_VAR(s, len);
+    if (len) {
+        uint8_t *cur = (uint8_t *) calloc(1, len);
+
+        buf = (uint8_t *) calloc(1, len);
+        rmm_snap_data(s);
+        rmm_snap_raw(s, buf, len);
+        /* Only an image the guest wrote is touched. */
+        fseek(dev->fp, 0, SEEK_SET);
+        if (!drv->writeprot && ((fread(cur, 1, len, dev->fp) != len) || memcmp(cur, buf, len))) {
+            fseek(dev->fp, 0, SEEK_SET);
+            if (fwrite(buf, 1, len, dev->fp) != len)
+                pclog("RMM: floppy image %s was not fully rolled back\n", drv->image_path);
+            fflush(dev->fp);
+        }
+        free(cur);
+        free(buf);
+    }
+}
+#endif

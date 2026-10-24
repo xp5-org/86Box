@@ -728,6 +728,24 @@ ini_dump(ini_t ini)
     }
 }
 
+/* Every entry in file order: cb(section, key, value, priv). Unnamed head sections are skipped. */
+void
+ini_foreach(ini_t ini, void (*cb)(const char *section, const char *key, const char *value, void *priv), void *priv)
+{
+    /* An ini_t is the bare list head; the first section hangs off its next. */
+    section_t *sec = (ini == NULL) ? NULL : (section_t *) ((list_t *) ini)->next;
+    while (sec != NULL) {
+        if (sec->name[0]) {
+            entry_t *ent = (entry_t *) sec->entry_head.next;
+            while (ent != NULL) {
+                cb(sec->name, ent->name, ent->data, priv);
+                ent = (entry_t *) ent->list.next;
+            }
+        }
+        sec = (section_t *) sec->list.next;
+    }
+}
+
 void
 ini_section_delete_var(ini_section_t self, const char *name)
 {

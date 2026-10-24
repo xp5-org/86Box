@@ -406,3 +406,18 @@ smram_set_separate_smram(uint8_t set)
 {
     use_separate_smram = set;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: every SMRAM window and the separate SMRAM array. */
+void
+smram_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, use_separate_smram);
+    if (use_separate_smram)
+        RMM_SNAP_VAR(s, smram);
+    for (smram_t *p = base_smram; p; p = p->next)
+        rmm_snap_raw(s, p, sizeof(smram_t));
+}
+#endif

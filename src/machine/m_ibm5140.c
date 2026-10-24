@@ -439,3 +439,14 @@ const device_t ibm5140_device = {
     .close = ibm5140_close,
     .config = ibm5140_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the board's own registers and printer shifter. */
+void
+ibm5140_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ibm5140_t));
+}
+#endif

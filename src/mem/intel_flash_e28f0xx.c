@@ -575,3 +575,22 @@ const device_t intel_flash_e28f0xx_cobalt3k_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: command, lock and control state and the flash array. The mappings stay live. */
+void
+intel_flash_e28f0xx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    flash_t *dev  = (flash_t *) priv;
+    flash_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(flash_t));
+    dev->array = keep.array;
+    memcpy(dev->mapping, keep.mapping, sizeof(dev->mapping));
+    memcpy(dev->mapping_h, keep.mapping_h, sizeof(dev->mapping_h));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, dev->array, biosmask + 1);
+}
+#endif

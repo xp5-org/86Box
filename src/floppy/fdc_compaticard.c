@@ -365,3 +365,14 @@ const device_t fdc_compaticard_iv_device = {
     .force_redraw  = NULL,
     .config        = compaticard_iv_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the control register. */
+void
+compaticard_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(compaticard_t));
+}
+#endif

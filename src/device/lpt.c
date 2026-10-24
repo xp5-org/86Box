@@ -1447,3 +1447,23 @@ const device_t lpt_port_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: port, ECP FIFO and lpt_ports/lpt_devs slot. */
+void
+lpt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    lpt_t *dev = (lpt_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(lpt_t));
+    if (dev->fifo)
+        rmm_snap_raw(s, dev->fifo, sizeof(fifo16_t));
+    if (dev->dt) {
+        RMM_SNAP_VAR(s, lpt_ports[dev->id]);
+        RMM_SNAP_VAR(s, lpt_devs[dev->id]);
+    }
+    RMM_SNAP_VAR(s, lpt_3bc_used);
+}
+#endif

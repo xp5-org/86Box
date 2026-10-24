@@ -74,6 +74,11 @@ if(AUTOMATION)
     endif()
 endif()
 
+if(RMM)
+    add_compile_definitions(USE_RMM)
+    target_sources(86Box PRIVATE rmm.c rmm_snap.c)
+endif()
+
 if(RELEASE)
     add_compile_definitions(RELEASE_BUILD)
 endif()

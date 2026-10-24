@@ -508,3 +508,16 @@ const device_t sis_5591_5600_ide_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+sis_5513_ide_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    sis_5513_ide_t *dev = (sis_5513_ide_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(sis_5513_ide_t));
+}
+#endif

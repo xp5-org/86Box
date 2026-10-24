@@ -666,6 +666,8 @@ typedef struct rage128_t {
    PDF 101); the pump copies a larger ring through it in pieces. */
 #define RAGE128_CCE_FIFO_DWORDS (1u << 19)
 #define RAGE128_CCE_FIFO_MASK   (RAGE128_CCE_FIFO_DWORDS - 1)
+/* Type-3 header plus RAGE128_PM4_MAX_PAYLOAD. */
+#define RAGE128_CCE_RESUME_DWORDS (16384 + 2)
     atomic_uint cce_retire_rptr;  /* ring read pointer the executor has finished
                                      executing up to                              */
     uint32_t cce_retire_pending;  /* read pointer of the dwords popped so far for
@@ -704,6 +706,11 @@ typedef struct rage128_t {
                                      executor parked.                             */
     uint32_t cce_scratch_pend_mask;
     uint8_t  cce_pop_tag;         /* tag of the last ring dword popped; CCE thread */
+    /* Monitor snapshot: unexecuted rest of a packet aborted by the drain.
+       Requeued by rage128_pm4_resume_requeue. See releasenotes.txt. */
+    atomic_int cce_snap_keep;
+    uint32_t   cce_resume_n;
+    uint32_t   cce_resume[RAGE128_CCE_RESUME_DWORDS];
     uint32_t cce_shadow_last;     /* last read pointer written to the host's
                                      read-pointer copy; CPU (submit) thread    */
     uint32_t  *cce_pl;            /* type-3 payload, ring executor  */
@@ -2041,6 +2048,7 @@ extern void rage128_pm4_reset(rage128_t *dev);
 extern void rage128_pm4_thread_init(rage128_t *dev);
 extern void rage128_pm4_thread_close(rage128_t *dev);
 extern void rage128_pm4_drain_wait(rage128_t *dev);
+extern void rage128_pm4_resume_requeue(rage128_t *dev);
 extern int  rage128_pm4_bus_master_ok(rage128_t *dev);
 extern void rage128_pm4_kick(rage128_t *dev);
 extern void rage128_pm4_gui_reset(rage128_t *dev);

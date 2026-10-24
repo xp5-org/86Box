@@ -963,3 +963,14 @@ const device_t philips_cm250_device = {
     .reset         = cm_reset,
     .config        = cm250_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole CM250 interface and drive state. */
+void
+cm250_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(cm250_t));
+}
+#endif

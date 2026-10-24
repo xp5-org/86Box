@@ -119,3 +119,13 @@ const device_t ibm_5161_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the eight latch registers. */
+void
+ibm_5161_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ibm_5161_t));
+}
+#endif

@@ -1942,3 +1942,16 @@ const device_t mpu401_mca_device = {
     .force_redraw  = NULL,
     .config        = mpu401_standalone_mca_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the MPU-401 queues and registers. */
+void
+snd_mpu401_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    mpu_t *dev = (mpu_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(mpu_t));
+}
+#endif

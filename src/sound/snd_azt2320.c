@@ -615,3 +615,16 @@ const device_t azt2320_device = {
     .alias         = "AZT2320",
     .config        = azt2320_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded AD1848 core. The host-stream position and buffer are kept. */
+void
+snd_azt2320_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    azt2320_t *dev = (azt2320_t *) priv;
+
+    ad1848_rmm_snap_embedded(s, &dev->ad1848, dev, sizeof(azt2320_t));
+}
+#endif

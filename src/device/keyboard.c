@@ -635,3 +635,22 @@ keyboard_add_device(void)
 {
     device_add(keyboard_devices[keyboard_type].device);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: scanning and LED state. Host key tables are kept. */
+void
+keyboard_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, keyboard_scan);
+    RMM_SNAP_VAR(s, caps_lock);
+    RMM_SNAP_VAR(s, num_lock);
+    RMM_SNAP_VAR(s, scroll_lock);
+    RMM_SNAP_VAR(s, kana_lock);
+    RMM_SNAP_VAR(s, kbd_in_reset);
+    RMM_SNAP_VAR(s, key5576mode);
+    /* Follows the scan code set selected in keyboard_at.c. */
+    RMM_SNAP_VAR(s, scan_table);
+}
+#endif

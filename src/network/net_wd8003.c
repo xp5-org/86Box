@@ -1260,3 +1260,19 @@ const device_t ibm_ethernet_efe5_device = {
     .force_redraw  = NULL,
     .config        = mca_mac_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+net_wd8003_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    wd_t *dev = (wd_t *) priv;
+    uint8_t save_ram_mapping[sizeof(dev->ram_mapping)];
+
+    memcpy(save_ram_mapping, &dev->ram_mapping, sizeof(dev->ram_mapping));
+    rmm_snap_raw(s, dev, sizeof(wd_t));
+    memcpy(&dev->ram_mapping, save_ram_mapping, sizeof(dev->ram_mapping));
+}
+#endif

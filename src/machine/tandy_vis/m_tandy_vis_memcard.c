@@ -439,3 +439,14 @@ const device_t tvis_memcard_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card's DS6417 memory and its serial interface state. */
+void
+tvis_memcard_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(tvis_memcard_t));
+}
+#endif

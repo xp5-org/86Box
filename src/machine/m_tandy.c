@@ -757,6 +757,24 @@ static const device_t eep_1000sl2_device = {
     .config        = NULL
 };
 
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the EEPROM and its serial-bus state. */
+static void
+eep_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(t1keep_t));
+}
+
+/* The EEPROM devices are private to this file. */
+rmm_snap_fn
+eep_rmm_snap_fn(const device_t *dev)
+{
+    return ((dev == &eep_1000hx_device) || (dev == &eep_1000sl2_device)) ? eep_rmm_snap : NULL;
+}
+#endif
+
 static void
 tandy_write(uint16_t addr, uint8_t val, void *priv)
 {
@@ -1048,3 +1066,27 @@ machine_tandy1000sl2_init(const machine_t *model)
 
     return ret;
 }
+
+#ifdef USE_RMM
+/* Monitor snapshots: the machine (RAM bank, ROM bank, the mapping) and its video controller. The video RAM is the
+   machine's own RAM; the SL2 ROM image is constant. */
+void
+tandy_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    tandy_t  *dev = (tandy_t *) priv;
+    t1kvid_t *vid = dev->vid;
+
+    rmm_snap_raw(s, dev, sizeof(tandy_t));
+    dev->vid = vid;
+    if (vid)
+        rmm_snap_raw(s, vid, sizeof(t1kvid_t));
+}
+
+/* The three video devices carry the machine struct. */
+rmm_snap_fn
+tandy_rmm_snap_fn(const device_t *dev)
+{
+    return ((dev == &tandy_1000_video_device) || (dev == &tandy_1000hx_video_device)
+            || (dev == &tandy_1000sl_video_device)) ? tandy_rmm_snap : NULL;
+}
+#endif

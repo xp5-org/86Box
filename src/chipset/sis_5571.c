@@ -185,3 +185,14 @@ const device_t sis_5571_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the slot numbers and sub-device pointers; the H2P, P2I, IDE and USB parts are devices of their own. */
+void
+sis_5571_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(sis_5571_t));
+}
+#endif

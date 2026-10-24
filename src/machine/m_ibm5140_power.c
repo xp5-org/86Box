@@ -966,3 +966,32 @@ ibm5140_power_create(ibm5140_video_t *video)
     device_add_ex(&ibm5140_power_device, dev);
     return dev;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the controller, its RTC and the power-off control block. */
+static void
+ibm5140_power_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ibm5140_power_t *dev     = (ibm5140_power_t *) priv;
+    ibm5140_video_t *video   = dev->video;
+    softpower_control_t *control = dev->control;
+    char            *fn      = dev->rtc.fn;
+    void            *data    = dev->rtc.data;
+
+    rmm_snap_raw(s, dev, sizeof(ibm5140_power_t));
+    dev->video    = video;
+    dev->control  = control;
+    dev->rtc.fn   = fn;
+    dev->rtc.data = data;
+    softpower_control_rmm_snap(s, control);
+}
+
+/* The device is private to this file. */
+rmm_snap_fn
+ibm5140_power_rmm_snap_fn(const device_t *dev)
+{
+    return (dev == &ibm5140_power_device) ? ibm5140_power_rmm_snap : NULL;
+}
+#endif

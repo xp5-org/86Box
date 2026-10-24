@@ -836,3 +836,34 @@ const device_t headland_ht21e_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+headland_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    headland_t *dev = (headland_t *) priv;
+    uint8_t save_low_mapping[sizeof(dev->low_mapping)];
+    uint8_t save_ems_mapping[sizeof(dev->ems_mapping)];
+    uint8_t save_mid_mapping[sizeof(dev->mid_mapping)];
+    uint8_t save_high_mapping[sizeof(dev->high_mapping)];
+    uint8_t save_shadow_mapping[sizeof(dev->shadow_mapping)];
+    uint8_t save_upper_mapping[sizeof(dev->upper_mapping)];
+
+    memcpy(save_low_mapping, &dev->low_mapping, sizeof(dev->low_mapping));
+    memcpy(save_ems_mapping, &dev->ems_mapping, sizeof(dev->ems_mapping));
+    memcpy(save_mid_mapping, &dev->mid_mapping, sizeof(dev->mid_mapping));
+    memcpy(save_high_mapping, &dev->high_mapping, sizeof(dev->high_mapping));
+    memcpy(save_shadow_mapping, &dev->shadow_mapping, sizeof(dev->shadow_mapping));
+    memcpy(save_upper_mapping, &dev->upper_mapping, sizeof(dev->upper_mapping));
+    rmm_snap_raw(s, dev, sizeof(headland_t));
+    memcpy(&dev->low_mapping, save_low_mapping, sizeof(dev->low_mapping));
+    memcpy(&dev->ems_mapping, save_ems_mapping, sizeof(dev->ems_mapping));
+    memcpy(&dev->mid_mapping, save_mid_mapping, sizeof(dev->mid_mapping));
+    memcpy(&dev->high_mapping, save_high_mapping, sizeof(dev->high_mapping));
+    memcpy(&dev->shadow_mapping, save_shadow_mapping, sizeof(dev->shadow_mapping));
+    memcpy(&dev->upper_mapping, save_upper_mapping, sizeof(dev->upper_mapping));
+}
+#endif

@@ -2874,3 +2874,18 @@ const device_t threec529_tp_device = {
     .force_redraw  = NULL,
     .config        = el3_mca_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct. The boot PROM image stays live (it is read from a file); PnP state is in the ISAPnP pass. */
+void
+net_3c509b_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    el3_t   *dev  = (el3_t *) priv;
+    uint8_t *prom = dev->prom;
+
+    rmm_snap_raw(s, dev, sizeof(el3_t));
+    dev->prom = prom;
+}
+#endif

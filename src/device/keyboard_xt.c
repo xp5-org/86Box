@@ -631,3 +631,13 @@ const device_t keyboard_pc_xt_device = {
     .force_redraw  = NULL,
     .config        = keyboard_pc_xt_config
 };
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: key-set choice. */
+void
+kbd_xt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(kbd_t));
+}
+#endif

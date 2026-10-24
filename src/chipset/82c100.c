@@ -395,3 +395,19 @@ const device_t ct_82c100_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the struct; the memory mappings stay live (the memory pass owns them). */
+void
+ct_82c100_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ct_82c100_t *dev = (ct_82c100_t *) priv;
+    uint8_t save_ems_mappings[sizeof(dev->ems_mappings)];
+
+    memcpy(save_ems_mappings, &dev->ems_mappings, sizeof(dev->ems_mappings));
+    rmm_snap_raw(s, dev, sizeof(ct_82c100_t));
+    memcpy(&dev->ems_mappings, save_ems_mappings, sizeof(dev->ems_mappings));
+}
+#endif

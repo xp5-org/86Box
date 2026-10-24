@@ -2300,3 +2300,17 @@ const device_t ht216_standalone_device = {
     .force_redraw  = ht216_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_ht216_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ht216_t *dev = (ht216_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(ht216_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

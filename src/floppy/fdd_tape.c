@@ -2396,3 +2396,27 @@ fdd_tape_close(void)
     if (was_attached && !fdd_tape_line_owned(drv))
         fdd_load(drv, drv->image_path);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the QIC-117 drive state. Fitting, drive select and the open image (the
+   medium) stay live; the four timers go with the global timer list. */
+void
+fdd_tape_rmm_snap(rmm_snap_t *s)
+{
+    fdd_tape_state_t keep;
+
+    if (!tape.attached)
+        return;
+    memcpy(&keep, &tape, sizeof(tape));
+    rmm_snap_raw(s, &tape, sizeof(tape));
+    tape.attached      = keep.attached;
+    tape.drive         = keep.drive;
+    tape.fp            = keep.fp;
+    tape.readonly      = keep.readonly;
+    tape.image_size    = keep.image_size;
+    tape.segs_per_cyl  = keep.segs_per_cyl;
+    tape.segs_per_head = keep.segs_per_head;
+}
+#endif

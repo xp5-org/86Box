@@ -229,3 +229,27 @@ const device_t jazz16_device = {
     .force_redraw  = NULL,
     .config        = jazz16_config
 };
+
+#ifdef USE_RMM
+#    include <string.h>
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card and its embedded SB core. The host-stream positions and buffers are kept. */
+void
+snd_jazz16_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    jazz16_t *dev = (jazz16_t *) priv;
+    int      pos = dev->sb.dsp.pos;
+    int16_t  buf[SOUNDBUFLEN * 2];
+    int16_t  cms_buf[SOUNDBUFLEN * 2];
+    uint16_t cms_pos = dev->sb.cms.pos;
+
+    memcpy(buf, dev->sb.dsp.buffer, sizeof(buf));
+    memcpy(cms_buf, dev->sb.cms.buffer, sizeof(cms_buf));
+    rmm_snap_raw(s, dev, sizeof(jazz16_t));
+    dev->sb.dsp.pos = pos;
+    memcpy(dev->sb.dsp.buffer, buf, sizeof(buf));
+    dev->sb.cms.pos = cms_pos;
+    memcpy(dev->sb.cms.buffer, cms_buf, sizeof(cms_buf));
+}
+#endif

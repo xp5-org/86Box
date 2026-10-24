@@ -1151,3 +1151,29 @@ const device_t lpt_bpck_device = {
     .force_redraw  = NULL,
     .config        = bpck_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole bridge state. The port handle, drive link and log stay live; the
+   drive's task file is saved with the drive, and the timers go with the global timer list. */
+void
+bpck_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    bpck_t        *dev      = (bpck_t *) priv;
+    void          *lpt      = dev->lpt;
+    void          *log      = dev->log;
+    scsi_device_t *sd       = dev->sd;
+    ide_tf_t      *tf       = dev->tf;
+    uint8_t        port     = dev->port;
+    uint8_t        no_drive = dev->no_drive;
+
+    rmm_snap_raw(s, dev, sizeof(bpck_t));
+    dev->lpt      = lpt;
+    dev->log      = log;
+    dev->sd       = sd;
+    dev->tf       = tf;
+    dev->port     = port;
+    dev->no_drive = no_drive;
+}
+#endif

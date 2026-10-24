@@ -839,7 +839,7 @@ isamem_init(const device_t *info)
             mem_mapping_disable(&dev->ems[i].mapping);
 
             /* Set up an I/O port handler. */
-            if (dev->board != ISAMEM_LOTECH_EMS_CARD)
+            if ((dev->board != ISAMEM_LOTECH_EMS_CARD) && (dev->base_addr[0] != 0))
                 io_sethandler(dev->base_addr[0] + (EMS_PGSIZE * i), 2,
                               ems_in, NULL, NULL, ems_out, NULL, NULL, &(dev->ems[i]));
 
@@ -2389,3 +2389,30 @@ isamem_has_config(int board)
 
     return (boards[board].dev->config ? 1 : 0);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: memdev_t and the card's RAM, copied back in place. */
+static void
+isamem_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    memdev_t *dev = (memdev_t *) priv;
+    uint8_t  *ram = dev->ram;
+    size_t    len = ((size_t) dev->total_size) << 10;
+
+    rmm_snap_raw(s, dev, sizeof(memdev_t));
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ram, len);
+}
+
+/* Visitor for this file's devices, NULL if not one of them. */
+rmm_snap_fn
+isamem_rmm_snap_fn(const device_t *dev)
+{
+    for (int c = 1; boards[c].dev; c++)
+        if (boards[c].dev == dev)
+            return isamem_rmm_snap;
+    return NULL;
+}
+#endif

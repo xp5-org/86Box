@@ -1418,3 +1418,34 @@ machine_is_pcjx(int m)
 {
     return machines[m].init == machine_pcjx_init;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the board (video, ROM images, VRAM, the PSG, keyboard, clock, page routes)
+   and the two heap buffers it owns, the keyboard queue and the gaiji RAM. The page routes are
+   derived from the registers, so they are rebuilt after a restore. */
+void
+pcjx_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    pcjx_t  *dev      = (pcjx_t *) priv;
+    uint8_t *font     = dev->font_data;
+    uint8_t *queue    = dev->keyboard.queue;
+    size_t   capacity = dev->keyboard.queue_capacity;
+
+    rmm_snap_raw(s, dev, sizeof(pcjx_t));
+    dev->font_data      = font;
+    dev->keyboard.queue = queue;
+    dev->keyboard.queue_capacity = capacity;
+    if (font) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, font + PCJX_CG2_IMAGE_SIZE, PCJX_GAIJI_SIZE);
+    }
+    if (queue) {
+        rmm_snap_data(s);
+        rmm_snap_raw(s, queue, capacity);
+    }
+    if (rmm_snap_restoring(s))
+        pcjx_rebuild_memory(dev);
+}
+#endif

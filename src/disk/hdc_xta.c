@@ -1527,3 +1527,27 @@ const device_t xta_st50x_pc5086_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: controller state, copied back in place. */
+void
+xta_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(hdc_t));
+}
+#endif
+
+#ifdef USE_RMM
+/* The ST-50X brings up two controllers. */
+void
+xta_dual_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    hdc_dual_t *dual = (hdc_dual_t *) priv;
+
+    for (int i = 0; i < 2; i++)
+        if (dual->hdc[i])
+            rmm_snap_raw(s, dual->hdc[i], sizeof(hdc_t));
+}
+#endif

@@ -793,3 +793,14 @@ const device_t ibm_plasma_vga_device = {
     .force_redraw  = ibm_plasma_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+vid_ibm_plasma_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(ibm_plasma_t));
+}
+#endif

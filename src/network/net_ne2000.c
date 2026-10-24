@@ -2040,3 +2040,14 @@ const device_t rtl8029as_device = {
     .force_redraw  = NULL,
     .config        = rtl8029as_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: NIC registers. The host link is not covered. */
+void
+ne2k_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(nic_t));
+}
+#endif

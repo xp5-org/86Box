@@ -481,3 +481,14 @@ const device_t ide_w83769f_pci_single_channel_device = {
     .short_name    = "Winbond W83769F",
     .ide_boards    = ide_boards_pri_sec
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+hdc_ide_w83769f_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(w83769f_t));
+}
+#endif

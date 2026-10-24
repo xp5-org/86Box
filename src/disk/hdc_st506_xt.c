@@ -2484,3 +2484,14 @@ const device_t st506_xt_toshiba_t1200_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: controller state, copied back in place. */
+void
+st506_xt_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(hdc_t));
+}
+#endif

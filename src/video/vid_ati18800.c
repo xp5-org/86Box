@@ -404,3 +404,17 @@ const device_t ati18800_device = {
     .force_redraw  = ati18800_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_ati18800_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ati18800_t *dev = (ati18800_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(ati18800_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

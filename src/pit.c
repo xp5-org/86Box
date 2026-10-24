@@ -2009,3 +2009,41 @@ const pit_intf_t pit_classic_intf = {
     .set_clock_div   = &pit_ctr_set_clock_div,
     .data            = NULL,
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: bus and clock constants, and the PIT interface table. */
+void
+pit_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, pit_devs);
+    RMM_SNAP_VAR(s, cpuclock);
+    RMM_SNAP_VAR(s, PITCONSTD);
+    RMM_SNAP_VAR(s, PAS16CONSTD);
+    RMM_SNAP_VAR(s, PAS16CONST2D);
+    RMM_SNAP_VAR(s, PASSCSICONSTD);
+    RMM_SNAP_VAR(s, SYSCLK);
+    RMM_SNAP_VAR(s, isa_timing);
+    RMM_SNAP_VAR(s, bus_timing);
+    RMM_SNAP_VAR(s, pci_timing);
+    RMM_SNAP_VAR(s, agp_timing);
+    RMM_SNAP_VAR(s, PCICLK);
+    RMM_SNAP_VAR(s, AGPCLK);
+    RMM_SNAP_VAR(s, PITCONST);
+    RMM_SNAP_VAR(s, PAS16CONST);
+    RMM_SNAP_VAR(s, PAS16CONST2);
+    RMM_SNAP_VAR(s, PASSCSICONST);
+    RMM_SNAP_VAR(s, ISACONST);
+    RMM_SNAP_VAR(s, CGACONST);
+    RMM_SNAP_VAR(s, MDACONST);
+    RMM_SNAP_VAR(s, HERCCONST);
+    RMM_SNAP_VAR(s, VGACONST1);
+    RMM_SNAP_VAR(s, VGACONST2);
+    RMM_SNAP_VAR(s, RTCCONST);
+    RMM_SNAP_VAR(s, ACPICONST);
+    RMM_SNAP_VAR(s, refresh_at_enable);
+    RMM_SNAP_VAR(s, io_delay);
+    RMM_SNAP_VAR(s, firsttime);
+}
+#endif

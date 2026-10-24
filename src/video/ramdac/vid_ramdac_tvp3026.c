@@ -761,3 +761,14 @@ const device_t tvp3026_ramdac_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; the GPIO callbacks stay valid within this process. */
+void
+tvp3026_ramdac_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(tvp3026_ramdac_t));
+}
+#endif

@@ -724,3 +724,17 @@ x87_legacy_pending_entry(void)
     /* The ordinary entry check gives #NM priority over pending #MF. */
     return (cr0 & 0xc) ? 0 : x87_legacy_pending();
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the last FPU instruction and operand pointers. */
+void
+x87_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, x87_pc_off);
+    RMM_SNAP_VAR(s, x87_op_off);
+    RMM_SNAP_VAR(s, x87_pc_seg);
+    RMM_SNAP_VAR(s, x87_op_seg);
+}
+#endif

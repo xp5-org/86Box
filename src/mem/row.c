@@ -324,3 +324,20 @@ device_t row_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the DRAM row boundaries and their mappings. */
+void
+row_rmm_snap(rmm_snap_t *s, UNUSED(void *priv))
+{
+    RMM_SNAP_VAR(s, rows_num);
+    RMM_SNAP_VAR(s, rows_default);
+    RMM_SNAP_VAR(s, rows_bits);
+    RMM_SNAP_VAR(s, row_unit);
+    RMM_SNAP_VAR(s, drb_defaults);
+    if (rows)
+        rmm_snap_raw(s, rows, rows_num * sizeof(row_t));
+}
+#endif

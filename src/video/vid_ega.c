@@ -1961,3 +1961,27 @@ const device_t et2000_device = {
     .force_redraw  = NULL,
     .config        = ega_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the EGA's 256 KB of planar VRAM by value; the display is redrawn after a restore. */
+void
+ega_rmm_snap_vram(rmm_snap_t *s, ega_t *ega)
+{
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ega->vram, 0x40000);
+    if (rmm_snap_restoring(s))
+        ega->fullchange = changeframecount;
+}
+
+/* Monitor snapshots: the whole ega_t, then its VRAM. */
+void
+ega_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    ega_t *ega = (ega_t *) priv;
+
+    rmm_snap_raw(s, ega, sizeof(ega_t));
+    ega_rmm_snap_vram(s, ega);
+}
+#endif

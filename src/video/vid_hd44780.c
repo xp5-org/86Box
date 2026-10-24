@@ -1196,3 +1196,14 @@ const device_t hd44780_cobalt3k_device = {
     .force_redraw  = hd44780_force_redraw,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its font and LPT pointers stay valid within this process. */
+void
+hd44780_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(hd44780_t));
+}
+#endif

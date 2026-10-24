@@ -213,3 +213,15 @@ machine_xt_xi8088_init(const machine_t *model)
 
     return ret;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the turbo state (a file static). */
+void
+xi8088_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    (void) priv;
+    rmm_snap_raw(s, &xi8088, sizeof(xi8088));
+}
+#endif

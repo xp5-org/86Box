@@ -344,3 +344,14 @@ pci_dummy_init(int min_slot, int max_slot, int nb_slot, int sb_slot)
         }
     }
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: config space, BARs and interrupt state. */
+void
+pci_dummy_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    rmm_snap_raw(s, priv, sizeof(pci_dummy_t));
+}
+#endif

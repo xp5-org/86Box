@@ -743,3 +743,16 @@ const device_t sis_5xxx_agp_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+pci_bridge_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    pci_bridge_t *dev = (pci_bridge_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(pci_bridge_t));
+}
+#endif

@@ -2596,3 +2596,20 @@ const device_t i82559er_onboard_device = {
     .force_redraw  = NULL,
     .config        = i8255x_onboard_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the controller, then its serial EEPROM contents. The EEPROM buffer stays live. */
+void
+i8255x_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    eepro100_t *dev = (eepro100_t *) priv;
+    eeprom_t   *ee  = dev->eeprom;
+
+    rmm_snap_raw(s, dev, sizeof(eepro100_t));
+    dev->eeprom = ee;
+    rmm_snap_data(s);
+    rmm_snap_raw(s, ee, offsetof(eeprom_t, contents) + sizeof(ee->contents));
+}
+#endif

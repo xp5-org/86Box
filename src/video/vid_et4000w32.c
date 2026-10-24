@@ -3317,3 +3317,17 @@ const device_t et4000w32p_pci_device = {
     .force_redraw  = et4000w32p_force_redraw,
     .config        = et4000w32p_pci_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_et4000w32_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    et4000w32p_t *dev = (et4000w32p_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(et4000w32p_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

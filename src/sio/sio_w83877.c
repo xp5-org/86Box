@@ -618,3 +618,16 @@ const device_t w83877_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct; its pointers stay valid within this process. */
+void
+w83877_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    w83877_t *dev = (w83877_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(w83877_t));
+}
+#endif

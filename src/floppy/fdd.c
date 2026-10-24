@@ -1249,3 +1249,92 @@ fdd_do_writeback(void *priv)
     if (drv->d86f_handler.writeback != NULL)
         drv->d86f_handler.writeback(drv);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+extern void        d86f_rmm_snap(rmm_snap_t *s, fdd_drive_t *drv);
+extern void        img_rmm_snap(rmm_snap_t *s, fdd_drive_t *drv);
+extern const char *img_rmm_snap_blocked(fdd_drive_t *drv);
+extern void        img_rmm_snap_ident(fdd_drive_t *drv, int d, char *out, size_t n);
+
+static int
+fdd_rmm_has_media(int d)
+{
+    return (drives[d].local != NULL) || (drives[d].d86f_priv != NULL);
+}
+
+/* Why the drives cannot be snapshotted, or NULL. Only raw sector images are covered. */
+const char *
+fdd_rmm_snap_blocked(void)
+{
+    for (int d = 0; d < FDD_NUM; d++) {
+        if (!fdd_rmm_has_media(d))
+            continue;
+        if (loaders[drives[d].driveloader].load != img_load)
+            return "a floppy image in a format other than a raw sector image is mounted";
+        if (img_rmm_snap_blocked(&drives[d]))
+            return img_rmm_snap_blocked(&drives[d]);
+    }
+    return NULL;
+}
+
+/* One line per drive with media. */
+void
+fdd_rmm_snap_ident(char *out, size_t n)
+{
+    for (int d = 0; d < FDD_NUM; d++) {
+        size_t used = strlen(out);
+
+        if (!fdd_rmm_has_media(d))
+            snprintf(out + used, n - used, "fdd %d empty\n", d);
+        else
+            img_rmm_snap_ident(&drives[d], d, out, n);
+    }
+}
+
+/* Mounted media objects; a snapshot restores only onto the same ones. */
+void
+fdd_rmm_snap_media(void *sig[2 * FDD_NUM])
+{
+    for (int d = 0; d < FDD_NUM; d++) {
+        sig[2 * d]     = drives[d].local;
+        sig[2 * d + 1] = drives[d].d86f_priv;
+    }
+}
+
+/* Monitor snapshots: drive mechanics and mounted media. Paths, history,
+   write-protect and sound state are kept. */
+void
+fdd_rmm_snap(rmm_snap_t *s)
+{
+    fdd_drive_t now;
+
+    RMM_SNAP_VAR(s, bios_boot_status);
+    RMM_SNAP_VAR(s, fdd_notfound);
+    for (int d = 0; d < FDD_NUM; d++) {
+        fdd_drive_t *drv = &drives[d];
+
+        now = *drv;
+        RMM_SNAP_VAR(s, *drv);
+        if (rmm_snap_restoring(s)) {
+            memcpy(drv->image_path, now.image_path, sizeof(now.image_path));
+            memcpy(drv->image_history, now.image_history, sizeof(now.image_history));
+            drv->writeprot = now.writeprot;
+            drv->read_only = now.read_only;
+#    ifndef DISABLE_FDD_AUDIO
+            drv->audio_profile                       = now.audio_profile;
+            drv->spindlemotor_pos                    = now.spindlemotor_pos;
+            drv->spindlemotor_fade_samples_remaining = now.spindlemotor_fade_samples_remaining;
+            drv->spindlemotor_fade_volume            = now.spindlemotor_fade_volume;
+            drv->spindlemotor_state                  = now.spindlemotor_state;
+            memcpy(drv->seek_state, now.seek_state, sizeof(now.seek_state));
+#    endif
+        }
+        if (drv->d86f_priv)
+            d86f_rmm_snap(s, drv);
+        if (drv->local)
+            img_rmm_snap(s, drv);
+    }
+}
+#endif

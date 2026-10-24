@@ -596,3 +596,17 @@ const device_t et3000_isa_device = {
     .force_redraw  = et3000_force_redraw,
     .config        = et3000_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card, its SVGA core and the VRAM. */
+void
+vid_et3000_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    et3000_t *dev = (et3000_t *) priv;
+
+    rmm_snap_raw(s, dev, sizeof(et3000_t));
+    svga_rmm_snap_vram(s, &dev->svga);
+}
+#endif

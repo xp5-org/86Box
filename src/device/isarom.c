@@ -704,3 +704,32 @@ isarom_has_config(int board)
 
     return (boards[board].dev->config ? 1 : 0);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the whole struct, then the contents of each socket whose ROM the guest can
+   write (the others are the file and never change). The rom_t pointers stay valid in this process. */
+static void
+isarom_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    isarom_t *dev = (isarom_t *) priv;
+
+    rmm_snap_raw(s, priv, sizeof(isarom_t));
+    for (uint8_t i = 0; i < get_limit(dev->type); i++) {
+        if (dev->socket[i].writable && dev->socket[i].rom.rom && (dev->socket[i].size > 0)) {
+            rmm_snap_data(s);
+            rmm_snap_raw(s, dev->socket[i].rom.rom, dev->socket[i].size);
+        }
+    }
+}
+/* Visitor for this file's devices, NULL if not one of them. */
+rmm_snap_fn
+isarom_rmm_snap_fn(const device_t *dev)
+{
+    for (int c = 1; boards[c].dev; c++)
+        if (boards[c].dev == dev)
+            return isarom_rmm_snap;
+    return NULL;
+}
+#endif

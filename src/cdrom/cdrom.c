@@ -64,6 +64,14 @@ uint8_t  __attribute__((aligned(16))) cdrom_scramble_table[2352] = {
 int cdrom_interface_current;
 int cdrom_assigned_letters = 0;
 
+#ifdef USE_RMM
+/* Bumped on every disc open or close; a snapshot restores only onto its own disc. */
+static uint32_t cdrom_rmm_mounts[CDROM_NUM];
+#    define CDROM_RMM_MOUNTED(dev) cdrom_rmm_mounts[(dev)->id % CDROM_NUM]++
+#else
+#    define CDROM_RMM_MOUNTED(dev)
+#endif
+
 #ifdef ENABLE_CDROM_LOG
 int cdrom_do_log = ENABLE_CDROM_LOG;
 
@@ -1175,6 +1183,7 @@ cdrom_unload(cdrom_t *dev)
     dev->cached_sector = -1;
     dev->subc_sector = -1;
 
+    CDROM_RMM_MOUNTED(dev);
     if (dev->local != NULL) {
         dev->ops->close(dev->local);
         dev->local = NULL;
@@ -3385,6 +3394,8 @@ cdrom_load(cdrom_t *dev, const char *fn, const int skip_insert)
     const int  was_empty = cdrom_is_empty(dev->id);
     int        ret       = 0;
 
+    CDROM_RMM_MOUNTED(dev);
+
     /* Make sure to not STRCPY if the two are pointing
        at the same place. */
     if (fn != dev->image_path)
@@ -3745,3 +3756,108 @@ cdrom_reload(const uint8_t id)
 
     config_save();
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: CD-ROM drives on ATAPI, SCSI and proprietary interface cards. */
+static int
+cdrom_rmm_snappable(int bus)
+{
+    switch (bus) {
+        case CDROM_BUS_ATAPI:
+        case CDROM_BUS_SCSI:
+        case CDROM_BUS_LPT:
+        case CDROM_BUS_MKE:
+        case CDROM_BUS_MITSUMI:
+        case CDROM_BUS_HITACHI:
+        case CDROM_BUS_PHILIPS:
+        case CDROM_BUS_CM100:
+        case CDROM_BUS_SONY:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+const char *
+cdrom_rmm_snap_blocked(void)
+{
+    for (int i = 0; i < CDROM_NUM; i++) {
+        if (cdrom[i].bus_type == CDROM_BUS_DISABLED)
+            continue;
+        if (!cdrom_rmm_snappable(cdrom[i].bus_type))
+            return "a CD-ROM drive on the USB bus is attached (no snapshot support for it)";
+        if (strstr(cdrom[i].image_path, "ioctl://") == cdrom[i].image_path)
+            return "a CD-ROM drive has a host drive mounted (its disc can change under the snapshot)";
+    }
+    return NULL;
+}
+
+/* Snapshot file: one line per ATAPI or SCSI drive, its disc identified by size. */
+void
+cdrom_rmm_snap_ident(char *out, size_t n)
+{
+    for (int i = 0; i < CDROM_NUM; i++) {
+        size_t   used = strlen(out);
+        uint64_t len  = 0;
+        FILE    *f;
+
+        if (cdrom[i].bus_type == CDROM_BUS_DISABLED)
+            continue;
+        if (cdrom[i].image_path[0] && (f = plat_fopen(cdrom[i].image_path, "rb"))) {
+            if (!fseeko64(f, 0, SEEK_END))
+                len = (uint64_t) ftello64(f);
+            fclose(f);
+        }
+        snprintf(out + used, n - used, "cdrom %d %s %s %" PRIu64 "\n", i,
+                 (cdrom[i].bus_type == CDROM_BUS_SCSI) ? "scsi" : (cdrom[i].bus_type == CDROM_BUS_ATAPI) ? "atapi" : (cdrom[i].bus_type == CDROM_BUS_LPT) ? "lpt" : "card",
+                 cdrom[i].image_path[0] ? "disc" : "empty", len);
+    }
+}
+
+/* Which disc each drive has: compared by snapshot.restore. */
+void
+cdrom_rmm_snap_media(uint32_t sig[])
+{
+    memcpy(sig, cdrom_rmm_mounts, sizeof(cdrom_rmm_mounts));
+}
+
+/* Per-drive state for ATAPI and SCSI. The disc, callbacks and mute setting are kept. */
+void
+cdrom_rmm_snap(rmm_snap_t *s)
+{
+    for (int i = 0; i < CDROM_NUM; i++) {
+        cdrom_t *dev = &cdrom[i];
+
+        if (!cdrom_rmm_snappable(dev->bus_type))
+            continue;
+        if (!rmm_snap_restoring(s))
+            rmm_snap_raw(s, dev, sizeof(cdrom_t));
+        else {
+            cdrom_t *live = malloc(sizeof(cdrom_t));
+
+            memcpy(live, dev, sizeof(cdrom_t));
+            rmm_snap_raw(s, dev, sizeof(cdrom_t));
+#    define KEEP(f) memcpy(&dev->f, &live->f, sizeof(dev->f))
+            KEEP(priv);
+            KEEP(image_path);
+            KEEP(prev_image_path);
+            KEEP(image_history);
+            KEEP(ops);
+            KEEP(local);
+            KEEP(log);
+            KEEP(insert);
+            KEEP(close);
+            KEEP(get_volume);
+            KEEP(get_channel);
+            KEEP(sound_on);
+            KEEP(host_letter);
+#    undef KEEP
+            free(live);
+        }
+        if (dev->priv && ((dev->bus_type == CDROM_BUS_ATAPI) || (dev->bus_type == CDROM_BUS_SCSI) || (dev->bus_type == CDROM_BUS_LPT)))
+            scsi_cdrom_rmm_snap(s, dev->priv);
+    }
+}
+#endif

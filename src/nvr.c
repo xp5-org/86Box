@@ -381,3 +381,18 @@ nvr_fopen(char *str, char *mode)
 {
     return (plat_fopen(nvr_path(str), mode));
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the emulated clock the RTC devices count from. */
+void
+nvr_rmm_snap(rmm_snap_t *s)
+{
+    RMM_SNAP_VAR(s, intclk);
+    /* The registered chip: its registers and one-second timer. A machine that holds it inside its own state
+       struct dumps it again there, to the same address, with the same contents. */
+    if (saved_nvr)
+        rmm_snap_raw(s, saved_nvr, sizeof(nvr_t));
+}
+#endif
