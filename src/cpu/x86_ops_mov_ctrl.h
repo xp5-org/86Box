@@ -90,14 +90,12 @@ opMOV_r_DRx_a16(uint32_t fetchdat)
         x86gpf(NULL, 0);
         return 1;
     }
-#ifdef USE_DEBUG_REGS_486
     /* General detect: a #DB fault before the instruction, with DR6.BD set */
-    if (dr[7] & 0x2000) {
+    if (cpu_debug_regs_486 && (dr[7] & 0x2000)) {
         dr[6] |= 0x2000;
         x86gen();
         return 1;
     }
-#endif
     fetch_ea_16(fetchdat);
     switch (cpu_reg) {
         case 0 ... 3:
@@ -136,14 +134,12 @@ opMOV_r_DRx_a32(uint32_t fetchdat)
         x86gpf(NULL, 0);
         return 1;
     }
-#ifdef USE_DEBUG_REGS_486
     /* General detect: a #DB fault before the instruction, with DR6.BD set */
-    if (dr[7] & 0x2000) {
+    if (cpu_debug_regs_486 && (dr[7] & 0x2000)) {
         dr[6] |= 0x2000;
         x86gen();
         return 1;
     }
-#endif
     fetch_ea_32(fetchdat);
     switch (cpu_reg) {
         case 0 ... 3:
@@ -180,6 +176,7 @@ static int
 opMOV_CRx_r_a16(uint32_t fetchdat)
 {
     uint32_t old_cr0 = cr0;
+    uint32_t new_cr0;
 
     if ((CPL || (cpu_state.eflags & VM_FLAG)) && (cr0 & 1)) {
         x86gpf(NULL, 0);
@@ -188,18 +185,19 @@ opMOV_CRx_r_a16(uint32_t fetchdat)
     fetch_ea_16(fetchdat);
     switch (cpu_reg) {
         case 0:
-            if (cpu_cr0_invalid(cpu_state.regs[cpu_rm].l)) {
+            new_cr0 = cpu_cr0_write_value(cpu_state.regs[cpu_rm].l);
+            if (cpu_cr0_invalid(new_cr0)) {
                 x86gpf(NULL, 0);
                 return 1;
             }
             /* Setting PG with PAE on loads the PDPTEs */
-            if ((cpu_state.regs[cpu_rm].l & 0x80000000) && !(cr0 & 0x80000000) && (cr4 & CR4_PAE) && pae_check_load(cr3)) {
+            if ((new_cr0 & 0x80000000) && !(cr0 & 0x80000000) && (cr4 & CR4_PAE) && pae_check_load(cr3)) {
                 x86gpf(NULL, 0);
                 return 1;
             }
-            if ((cpu_state.regs[cpu_rm].l ^ cr0) & 0x00000001)
+            if ((new_cr0 ^ cr0) & 0x00000001)
                 flushmmucache();
-            else if ((cpu_state.regs[cpu_rm].l ^ cr0) & 0x80000000) {
+            else if ((new_cr0 ^ cr0) & 0x80000000) {
                 if (is_p6)
                     flushmmucache();
                 else {
@@ -211,12 +209,12 @@ opMOV_CRx_r_a16(uint32_t fetchdat)
                     if (cpu_use_dynarec)
                         CPU_BLOCK_END();
                 }
-            } else if ((cpu_state.regs[cpu_rm].l ^ cr0) & WP_FLAG)
+            } else if ((new_cr0 ^ cr0) & WP_FLAG)
                 flushmmucache_write();
             /* Make sure CPL = 0 when switching from real mode to protected mode. */
-            if ((cpu_state.regs[cpu_rm].l & 0x01) && !(cr0 & 0x01))
+            if ((new_cr0 & 0x01) && !(cr0 & 0x01))
                 cpu_state.seg_cs.access &= 0x9f;
-            cr0 = cpu_state.regs[cpu_rm].l;
+            cr0 = new_cr0;
             if (cpu_16bitbus)
                 cr0 |= 0x10;
             if (hascache && !(cr0 & (1 << 30)))
@@ -225,6 +223,8 @@ opMOV_CRx_r_a16(uint32_t fetchdat)
                 cpu_cache_int_enabled = 0;
             if (hascache && ((cr0 ^ old_cr0) & (1 << 30)))
                 cpu_update_waitstates();
+            if ((cr0 ^ old_cr0) & (1 << 30))
+                cpu_car_update();
             if (cr0 & 1)
                 cpu_cur_status |= CPU_STATUS_PMODE;
             else
@@ -273,6 +273,7 @@ static int
 opMOV_CRx_r_a32(uint32_t fetchdat)
 {
     uint32_t old_cr0 = cr0;
+    uint32_t new_cr0;
 
     if ((CPL || (cpu_state.eflags & VM_FLAG)) && (cr0 & 1)) {
         x86gpf(NULL, 0);
@@ -281,18 +282,19 @@ opMOV_CRx_r_a32(uint32_t fetchdat)
     fetch_ea_32(fetchdat);
     switch (cpu_reg) {
         case 0:
-            if (cpu_cr0_invalid(cpu_state.regs[cpu_rm].l)) {
+            new_cr0 = cpu_cr0_write_value(cpu_state.regs[cpu_rm].l);
+            if (cpu_cr0_invalid(new_cr0)) {
                 x86gpf(NULL, 0);
                 return 1;
             }
             /* Setting PG with PAE on loads the PDPTEs */
-            if ((cpu_state.regs[cpu_rm].l & 0x80000000) && !(cr0 & 0x80000000) && (cr4 & CR4_PAE) && pae_check_load(cr3)) {
+            if ((new_cr0 & 0x80000000) && !(cr0 & 0x80000000) && (cr4 & CR4_PAE) && pae_check_load(cr3)) {
                 x86gpf(NULL, 0);
                 return 1;
             }
-            if ((cpu_state.regs[cpu_rm].l ^ cr0) & 0x00000001)
+            if ((new_cr0 ^ cr0) & 0x00000001)
                 flushmmucache();
-            else if ((cpu_state.regs[cpu_rm].l ^ cr0) & 0x80000000) {
+            else if ((new_cr0 ^ cr0) & 0x80000000) {
                 if (is_p6)
                     flushmmucache();
                 else {
@@ -304,12 +306,12 @@ opMOV_CRx_r_a32(uint32_t fetchdat)
                     if (cpu_use_dynarec)
                         CPU_BLOCK_END();
                 }
-            } else if ((cpu_state.regs[cpu_rm].l ^ cr0) & WP_FLAG)
+            } else if ((new_cr0 ^ cr0) & WP_FLAG)
                 flushmmucache_write();
             /* Make sure CPL = 0 when switching from real mode to protected mode. */
-            if ((cpu_state.regs[cpu_rm].l & 0x01) && !(cr0 & 0x01))
+            if ((new_cr0 & 0x01) && !(cr0 & 0x01))
                 cpu_state.seg_cs.access &= 0x9f;
-            cr0 = cpu_state.regs[cpu_rm].l;
+            cr0 = new_cr0;
             if (cpu_16bitbus)
                 cr0 |= 0x10;
             if (hascache && !(cr0 & (1 << 30)))
@@ -318,6 +320,8 @@ opMOV_CRx_r_a32(uint32_t fetchdat)
                 cpu_cache_int_enabled = 0;
             if (hascache && ((cr0 ^ old_cr0) & (1 << 30)))
                 cpu_update_waitstates();
+            if ((cr0 ^ old_cr0) & (1 << 30))
+                cpu_car_update();
             if (cr0 & 1)
                 cpu_cur_status |= CPU_STATUS_PMODE;
             else
@@ -370,14 +374,12 @@ opMOV_DRx_r_a16(uint32_t fetchdat)
         x86gpf(NULL, 0);
         return 1;
     }
-#ifdef USE_DEBUG_REGS_486
     /* General detect: a #DB fault before the instruction, with DR6.BD set */
-    if (dr[7] & 0x2000) {
+    if (cpu_debug_regs_486 && (dr[7] & 0x2000)) {
         dr[6] |= 0x2000;
         x86gen();
         return 1;
     }
-#endif
     fetch_ea_16(fetchdat);
     switch (cpu_reg) {
         case 0 ... 3:
@@ -400,6 +402,7 @@ opMOV_DRx_r_a16(uint32_t fetchdat)
             fallthrough;
         case 7:
             dr[7] = (cpu_state.regs[cpu_rm].l | 0x00000400) & (is586 ? ~0x0000d800 : ~0);
+            cpu_dr7_update();
             break;
         default:
             x86illegal();
@@ -407,9 +410,8 @@ opMOV_DRx_r_a16(uint32_t fetchdat)
     }
     CLOCK_CYCLES(6);
     PREFETCH_RUN(6, 2, rmdat, 0, 0, 0, 0, 0);
-#ifdef USE_DEBUG_REGS_486
-    CPU_BLOCK_END();
-#endif
+    if (cpu_debug_regs_486)
+        CPU_BLOCK_END();
     return 0;
 }
 static int
@@ -419,14 +421,12 @@ opMOV_DRx_r_a32(uint32_t fetchdat)
         x86gpf(NULL, 0);
         return 1;
     }
-#ifdef USE_DEBUG_REGS_486
     /* General detect: a #DB fault before the instruction, with DR6.BD set */
-    if (dr[7] & 0x2000) {
+    if (cpu_debug_regs_486 && (dr[7] & 0x2000)) {
         dr[6] |= 0x2000;
         x86gen();
         return 1;
     }
-#endif
     fetch_ea_32(fetchdat);
     switch (cpu_reg) {
         case 0 ... 3:
@@ -449,6 +449,7 @@ opMOV_DRx_r_a32(uint32_t fetchdat)
             fallthrough;
         case 7:
             dr[7] = (cpu_state.regs[cpu_rm].l | 0x00000400) & (is586 ? ~0x0000d800 : ~0);
+            cpu_dr7_update();
             break;
         default:
             x86illegal();
@@ -456,9 +457,8 @@ opMOV_DRx_r_a32(uint32_t fetchdat)
     }
     CLOCK_CYCLES(6);
     PREFETCH_RUN(6, 2, rmdat, 0, 0, 0, 0, 1);
-#ifdef USE_DEBUG_REGS_486
-    CPU_BLOCK_END();
-#endif
+    if (cpu_debug_regs_486)
+        CPU_BLOCK_END();
     return 0;
 }
 

@@ -70,8 +70,7 @@ make_tar() {
 	fi
 
 	# Use MacPorts gnutar (if installed) on macOS.
-	local tar_cmd=tar
-	which gnutar > /dev/null 2>&1 && local tar_cmd=gnutar
+	which gnutar > /dev/null 2>&1 && local tar_cmd=gnutar || local tar_cmd=tar
 
 	# Determine the best supported compression type.
 	local compression_flag=
@@ -112,6 +111,33 @@ make_tar() {
 	return $?
 }
 
+# Download and extract sources separately, retrying incomplete transfers and
+# keeping partially extracted sources out of the build cache.
+download_source() {
+	local url="$1"
+	local source_dir="$2"
+	local source_name=$(basename "$source_dir")
+	local retry tmp_dir
+	for retry in 0 5 10 20 40
+	do
+		sleep $retry
+		tmp_dir=$(mktemp -d "$cache_dir/source.XXXXXX") || return 1
+		echo "[-] Downloading sources from [$url]"
+		if curl --fail --location --silent --show-error --connect-timeout 15 --max-time 120 \
+			--output "$tmp_dir/source.tar.gz" "$url" &&
+			tar zxf "$tmp_dir/source.tar.gz" -C "$tmp_dir" &&
+			[ -d "$tmp_dir/$source_name" ] &&
+			mv "$tmp_dir/$source_name" "$source_dir"
+		then
+			rm -rf "$tmp_dir"
+			return 0
+		fi
+		rm -rf "$tmp_dir"
+	done
+	echo "[!] Source download or extraction failed for [$url]" >&2
+	return 1
+}
+
 cache_dir="$HOME/86box-build-cache"
 [ ! -d "$cache_dir" ] && mkdir -p "$cache_dir"
 check_buildtag() {
@@ -119,8 +145,7 @@ check_buildtag() {
 	return $?
 }
 save_buildtag() {
-	local contents="$BUILD_TAG"
-	[ -n "$2" ] && local contents="$2"
+	[ -n "$2" ] && local contents="$2" || local contents="$BUILD_TAG"
 	echo "$contents" > "$cache_dir/buildtag.$1"
 	return $?
 }
@@ -228,14 +253,38 @@ do
 			# Check for lddtree and install it if required.
 			which lddtree > /dev/null || DEBIAN_FRONTEND=noninteractive sudo apt-get -y install pax-utils
 
-			# Default to main binary.
-			binary="$1"
-			[ -z "$binary" ] && binary="archive_tmp/usr/local/bin/$project"
+			# Handle AppImages.
+			if echo "$1" | grep -q "://"
+			then
+				if ! wget -O treetemp.AppImage "$1" || ! chmod +x treetemp.AppImage
+				then
+					rm -f treetemp.AppImage
+					exit 1
+				fi
+				set -- treetemp.AppImage
+			fi
+			case "$1" in
+				*.AppImage)
+					# Extract AppImage.
+					rm -rf squashfs-root
+					"./$1" --appimage-extract
+					appdir=squashfs-root
+					binary=
+					;;
+
+				*)
+					appdir=archive_tmp
+					binary="$1"
+					;;
+			esac
+			[ -z "$binary" ] && binary="$appdir/usr/local/bin/$project" # default to main binary
 
 			# Run lddtree with AppImage lib directories included in the search path.
-			LD_LIBRARY_PATH=$(find "$(pwd)/archive_tmp" -type d -name lib -o -name lib64 | while read dir; do find "$dir" -type d; done | tr '\n' ':') \
+			LD_LIBRARY_PATH=$(find "$(readlink -f "$appdir")" -type d -name lib -o -name lib64 | while read dir; do find "$dir" -type d; done | tr '\n' ':') \
 				lddtree "$binary"
-			exit $?
+			status=$?
+			[ $appdir = "squashfs-root" ] && rm -rf treetemp.AppImage squashfs-root
+			exit $status
 			;;
 
 		-s)
@@ -399,9 +448,6 @@ then
 	fi
 elif is_mac
 then
-	# macOS lacks nproc, but sysctl can do the same job.
-	alias nproc='sysctl -n hw.logicalcpu'
-
 	# Handle universal building.
 	if echo "$arch" | grep -q '+'
 	then
@@ -575,8 +621,7 @@ then
 		fi
 
 		# Notarize the compressed app bundle.
-		status=0
-		mac_notarize "$zip_name" || status=50
+		mac_notarize "$zip_name" && status=0 || status=50
 
 		# All good.
 		echo [-] Universal build of [$package_name] for [$arch] with flags [$cmake_flags] successful
@@ -632,10 +677,6 @@ then
 		sudo sed -i -e 's/--enable-libproxy/--disable-libproxy/g' "$wget_portfile"
 		sudo sed -i -e 's/port:libproxy//g' "$wget_portfile"
 
-		# Work around openal-soft failing to build due to C++20. (MacPorts issue 73874)
-		alsoft_portfile="$macports/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/audio/openal-soft/Portfile"
-		wc -c "$alsoft_portfile" | grep -q ' 6722 ' && sudo sed -i -e 's/configure.args-append/configure.compiler macports-clang-19\nconfigure.args-append/' "$alsoft_portfile"
-
 		while :
 		do
 			# Attempt to install dependencies.
@@ -679,7 +720,7 @@ else
 	esac
 
 	# Establish general dependencies.
-	pkgs="cmake ninja-build pkg-config git wget p7zip-full wayland-protocols tar gzip file appstream qttranslations5-l10n python3-pip python3-venv squashfs-tools curl"
+	pkgs="cmake ninja-build pkg-config git wget p7zip-full wayland-protocols tar gzip file appstream qt6-translations-l10n python3-pip python3-venv squashfs-tools curl patchelf"
 	if [ "$(dpkg --print-architecture)" = "$arch_deb" ]
 	then
 		pkgs="$pkgs build-essential"
@@ -702,10 +743,10 @@ else
 	# ...and the ones we do want listed. Non-dev packages fill missing spots on the list.
 	libpkgs=""
 	longest_libpkg=0
-	for pkg in libc6-dev libstdc++6 libopenal-dev libfreetype6-dev libx11-dev libsdl3-dev libpng-dev librtmidi-dev qt6-declarative-dev libwayland-dev libevdev-dev libxkbcommon-x11-dev libglib2.0-dev libslirp-dev libaudio-dev libjack-jackd2-dev libpipewire-0.3-dev libsamplerate0-dev libsndio-dev libvdeplug-dev libfluidsynth-dev libsndfile1-dev libserialport-dev libvncserver-dev libzstd-dev
+	for pkg in libc6-dev libstdc++6 libopenal-dev libfreetype-dev libx11-dev libsdl3-dev libpng-dev librtmidi-dev qt6-declarative-dev libwayland-dev libevdev-dev libxkbcommon-x11-dev libglib2.0-dev libslirp-dev libaudio-dev libjack-jackd2-dev libpipewire-0.3-dev libsamplerate0-dev libsndio-dev libvdeplug-dev libfluidsynth-dev libsndfile1-dev libserialport-dev libvncserver-dev libzstd-dev
 	do
 		libpkgs="$libpkgs $pkg:$arch_deb"
-		length=$(echo -n $pkg | sed 's/-dev$//' | sed "s/qtdeclarative/qt/" | wc -c)
+		length=$(echo -n $pkg | sed 's/-dev$//' | sed "s/-declarative$//" | wc -c)
 		[ $length -gt $longest_libpkg ] && longest_libpkg=$length
 	done
 
@@ -777,6 +818,10 @@ EOF
 	export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
+# Set build thread count.
+build_threads=$(cat ~/86box-build-threads.txt 2> /dev/null)
+[ -z "$build_threads" ] && build_threads=$(is_mac && sysctl -n hw.logicalcpu || nproc)
+
 # Build librashader library.
 prefix="$cache_dir/librashader"
 if [ ! -d "$prefix/.git" ]
@@ -806,7 +851,7 @@ else
 	rustup target add "$arch_rust"
 	export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
 fi
-(cd "$prefix" && cargo build -p librashader-capi --target "$arch_rust" --profile release --no-default-features --features runtime-vulkan) || exit 99
+(cd "$prefix" && cargo build -j $build_threads -p librashader-capi --target "$arch_rust" --profile release --no-default-features --features runtime-vulkan) || exit 99
 librashader_target="$prefix/target/$arch_rust/release"
 if is_windows
 then
@@ -859,7 +904,7 @@ fi
 if [ "$BUILD_TAG" != "precondition" ]
 then
 	echo [-] Running build
-	cmake --build build -j$(nproc)
+	cmake --build build -j $build_threads
 	status=$?
 	if [ $status -ne 0 ]
 	then
@@ -880,31 +925,13 @@ else
 		cp "$(which cp)" "build/src/$project"
 	fi
 fi
+grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=.*Debug.*" build/CMakeCache.txt && cmake_build_type=Debug || cmake_build_type=Release
 
-# Download Discord Game SDK from their CDN if we're in a new build.
-discord_version="3.2.1"
-discord_zip="$cache_dir/discord_game_sdk-$discord_version.zip"
-if [ ! -e "$discord_zip" ]
-then
-	# Download file.
-	echo [-] Downloading Discord Game SDK
-	rm -f "$cache_dir/discord_game_sdk"* # remove old versions
-	wget -qO "$discord_zip" "https://dl-game-sdk.discordapp.net/$discord_version/discord_game_sdk.zip"
-	status=$?
-	if [ $status -ne 0 ]
-	then
-		echo [!] Discord Game SDK download failed with status [$status]
-		rm -f "$discord_zip"
-	fi
-else
-	echo [-] Not downloading Discord Game SDK again
-fi
-
-# Determine Discord Game SDK architecture.
+# Determine architecture name for self-built library build directories.
 case $arch in
-	64)		arch_discord="x86_64";;
-	arm64 | ARM64)	arch_discord="aarch64";;
-	*)		arch_discord="$arch";;
+	64)		arch_build="x86_64";;
+	arm64 | ARM64)	arch_build="aarch64";;
+	*)		arch_build="$arch";;
 esac
 
 # Create temporary directory for archival.
@@ -965,9 +992,8 @@ else
 		git clone --depth 1 "$(dirname "$git_repo")/mdsx.git" "$prefix" && break
 	done
 fi
-debug_args=
-grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=Debug" build/CMakeCache.txt && debug_args=DEBUG=y
-make -C "$prefix/src" -j$(nproc) CC="$cc_binary" STRIP="$strip_binary" $debug_args || exit 99
+[ "$cmake_build_type" = "Debug" ] && debug_args=DEBUG=y || debug_args=
+make -C "$prefix/src" -j $build_threads CC="$cc_binary" STRIP="$strip_binary" $debug_args || exit 99
 find "$prefix/src" -name '*.[oa]' -delete
 mv "$prefix/src/mdsx."* archive_tmp/ || exit 99
 
@@ -994,12 +1020,10 @@ else
 		git clone --recurse-submodules --no-shallow-submodules --remote-submodules https://github.com/aaru-dps/libaaruformat.git "$prefix" && break
 	done
 fi
-build_type=Release
-grep -qiE "^CMAKE_BUILD_TYPE:[^=]+=Debug" build/CMakeCache.txt && build_type=Debug
-prefix_build="$prefix/build-$arch_discord" # hack
-cmake -G Ninja -D CMAKE_BUILD_TYPE=$build_type -D BUILD_TOOL=1 -D AARU_BUILD_PACKAGE=ON \
+prefix_build="$prefix/build-$arch_build"
+cmake -G Ninja -D AARU_BUILD_PACKAGE=ON -D "CMAKE_BUILD_TYPE=$cmake_build_type" \
 	-D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -B "$prefix_build" -S "$prefix" || exit 99
-cmake --build "$prefix_build" -j$(nproc) || exit 99
+cmake --build "$prefix_build" -j $build_threads || exit 99
 find "$prefix_build" -name '*.[oa]' -delete
 cp "$prefix_build/libaaruformat."* archive_tmp/ || exit 99
 
@@ -1030,10 +1054,6 @@ then
 		done
 	fi
 
-	# Archive Discord Game SDK DLL.
-	"$sevenzip" e -y -o"archive_tmp" "$discord_zip" "lib/$arch_discord/discord_game_sdk.dll"
-	[ ! -e "archive_tmp/discord_game_sdk.dll" ] && echo [!] No Discord Game SDK for architecture [$arch_discord]
-
 	# Archive executable, while also stripping it if requested.
 	if [ $strip -ne 0 ]
 	then
@@ -1047,17 +1067,12 @@ elif is_mac
 then
 	cwd_root="$(pwd)"
 	# Archive app bundle with libraries.
-	cmake_flags_install=
-	[ $strip -ne 0 ] && cmake_flags_install="$cmake_flags_install --strip"
+	[ $strip -ne 0 ] && cmake_flags_install="--strip" || cmake_flags_install=
 	cmake --install build --prefix "$(pwd)/archive_tmp" $cmake_flags_install
 	status=$?
 
 	if [ $status -eq 0 ]
 	then
-		# Archive Discord Game SDK library.
-		unzip -j "$discord_zip" "lib/$arch_discord/discord_game_sdk.dylib" -d "archive_tmp/"*".app/Contents/Frameworks"
-		[ ! -e "archive_tmp/"*".app/Contents/Frameworks/discord_game_sdk.dylib" ] && echo [!] No Discord Game SDK for architecture [$arch_discord]
-
 		# Archive self-built libraries.
 		mv "archive_tmp/mdsx.dylib" "archive_tmp/libaaruformat.dylib" "archive_tmp/librashader.dylib" "archive_tmp/"*".app/Contents/Frameworks/"
 
@@ -1079,103 +1094,87 @@ then
 else
 	cwd_root="$(pwd)"
 
-	# Build SDL2 with video systems (and dependencies) only if the SDL interface is used.
-	sdl_ui=OFF
-	grep -qiE "^QT:BOOL=ON" build/CMakeCache.txt || sdl_ui=ON
+	# Build SDL with video systems (and dependencies) only if the SDL interface is used.
+	grep -qiE "^QT:[^=]+=ON" build/CMakeCache.txt && sdl_ui=OFF || sdl_ui=ON
 
 	# Build rtmidi without JACK support to remove the dependency on libjack, as
 	# the Debian libjack is very likely to be incompatible with the system jackd.
-	# Newer versions are ABI incompatible and require newer CMake.
+	# Newer versions are ABI incompatible (moved from .7 to .8)
 	prefix="$cache_dir/rtmidi-6.0.0"
 	if [ ! -d "$prefix" ]
 	then
 		rm -rf "$cache_dir/rtmidi-"* # remove old versions
-		wget -qO - https://github.com/thestk/rtmidi/archive/refs/tags/6.0.0.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
+		download_source https://github.com/thestk/rtmidi/archive/refs/tags/6.0.0.tar.gz "$prefix" || exit 99
 	fi
-	prefix_build="$prefix/build-$arch_deb"
-	cmake -G Ninja -D RTMIDI_API_JACK=OFF -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" -S "$prefix" -B "$prefix_build" || exit 99
-	cmake --build "$prefix_build" -j$(nproc) || exit 99
+	prefix_build="$prefix/build-$arch_deb-$cmake_build_type"
+	cmake -G Ninja -D RTMIDI_API_JACK=OFF -D "CMAKE_BUILD_TYPE=$cmake_build_type" -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" -S "$prefix" -B "$prefix_build" || exit 99
+	cmake --build "$prefix_build" -j $build_threads || exit 99
 	cmake --install "$prefix_build" || exit 99
 
 	# Build FluidSynth without sound systems to remove the dependencies on libjack
 	# and other sound system libraries. We don't output audio through FluidSynth.
-	prefix="$cache_dir/fluidsynth-2.5.3"
+	prefix="$cache_dir/fluidsynth-2.6.1"
 	if [ ! -d "$prefix" ]
 	then
 		rm -rf "$cache_dir/fluidsynth-"* # remove old versions
-		wget -qO - https://github.com/FluidSynth/fluidsynth/archive/refs/tags/v2.5.3.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
+		download_source https://github.com/FluidSynth/fluidsynth/archive/refs/tags/v2.6.1.tar.gz "$prefix" || exit 99
 	fi
-	sed -i -e 's/SndFile_WITH_EXTERNAL_LIBS/1/g' "$prefix/CMakeLists.txt" # patch to enable sf3 support with old libsndfile
-	prefix_build="$prefix/build-$arch_deb"
-	cmake -G Ninja -D enable-jack=OFF -D enable-oss=OFF -D enable-sdl2=OFF -D enable-pulseaudio=OFF -D enable-pipewire=OFF -D enable-alsa=OFF \
-		-D SndFile_WITH_EXTERNAL_LIBS=ON -D enable-aufile=OFF -D enable-dbus=OFF -D enable-network=OFF -D enable-ipv6=OFF \
-		-D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" \
+	sed -i -e 's/SndFile_WITH_EXTERNAL_LIBS/1/g' "$prefix/CMakeLists.txt" # patch to enable sf3 support with packaged libsndfile
+	prefix_build="$prefix/build-$arch_deb-$cmake_build_type"
+	cmake -G Ninja -D enable-jack=OFF -D enable-oss=OFF -D enable-sdl3=OFF -D enable-pulseaudio=OFF -D enable-pipewire=OFF -D enable-alsa=OFF \
+		-D SndFile_WITH_EXTERNAL_LIBS=ON -D enable-aufile=OFF -D enable-dbus=OFF -D enable-network=OFF -D enable-ipv6=OFF -D enable-readline=OFF \
+		-D enable-systemd=OFF -D "CMAKE_BUILD_TYPE=$cmake_build_type" -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" \
 		-S "$prefix" -B "$prefix_build" || exit 99
-	cmake --build "$prefix_build" -j$(nproc) || exit 99
+	cmake --build "$prefix_build" -j $build_threads || exit 99
 	cmake --install "$prefix_build" || exit 99
 
-	# Build SDL3 for joystick support, with most components
+	# Build SDL for joystick support, with most components
 	# disabled to remove the dependencies on PulseAudio and libdrm.
-	prefix="$cache_dir/SDL3-3.4.14"
+	prefix="$cache_dir/SDL3-3.4.18"
 	if [ ! -d "$prefix" ]
 	then
-		rm -rf "$cache_dir/SDL2-"*
-		rm -rf "$cache_dir/SDL3-"* # remove old versions
-		wget -qO - https://www.libsdl.org/release/SDL3-3.4.14.tar.gz | tar zxf - -C "$cache_dir" || rm -rf "$prefix"
+		rm -rf "$cache_dir/SDL"[23]-* # remove old versions
+		download_source https://www.libsdl.org/release/SDL3-3.4.18.tar.gz "$prefix" || exit 99
 	fi
-	prefix_build="$cache_dir/SDL3-3.4.14-build-$arch_deb"
+	prefix_build="$prefix-build-$arch_deb-$cmake_build_type"
 	sdl_ui=OFF
 	cmake -G Ninja -D SDL_SHARED=ON -D SDL_STATIC=OFF \
 		\
-		-D SDL_AUDIO=OFF -D SDL_DUMMYAUDIO=OFF -D SDL_DISKAUDIO=OFF -D SDL_OSS=OFF -D SDL_ALSA=OFF -D SDL_ALSA_SHARED=OFF \
-		-D SDL_JACK=OFF -D SDL_JACK_SHARED=OFF -D SDL_ESD=OFF -D SDL_ESD_SHARED=OFF -D SDL_PIPEWIRE=OFF \
-		-D SDL_PIPEWIRE_SHARED=OFF -D SDL_PULSEAUDIO=OFF -D SDL_PULSEAUDIO_SHARED=OFF -D SDL_ARTS=OFF -D SDL_ARTS_SHARED=OFF \
-		-D SDL_NAS=OFF -D SDL_NAS_SHARED=OFF -D SDL_SNDIO=OFF -D SDL_SNDIO_SHARED=OFF -D SDL_FUSIONSOUND=OFF \
-		-D SDL_FUSIONSOUND_SHARED=OFF -D SDL_LIBSAMPLERATE=OFF -D SDL_LIBSAMPLERATE_SHARED=OFF \
+		-D SDL_AUDIO=OFF -D SDL_DUMMYAUDIO=OFF -D SDL_DISKAUDIO=OFF -D SDL_OSS=OFF -D SDL_ALSA=OFF \
+		-D SDL_ALSA_SHARED=OFF -D SDL_JACK=OFF -D SDL_JACK_SHARED=OFF -D SDL_PIPEWIRE=OFF -D SDL_PIPEWIRE_SHARED=OFF \
+		-D SDL_PULSEAUDIO=OFF -D SDL_PULSEAUDIO_SHARED=OFF -D SDL_SNDIO=OFF -D SDL_SNDIO_SHARED=OFF \
 		\
 		-D SDL_VIDEO=$sdl_ui -D SDL_X11=$sdl_ui -D SDL_X11_SHARED=$sdl_ui -D SDL_WAYLAND=$sdl_ui -D SDL_WAYLAND_SHARED=$sdl_ui \
-		-D SDL_WAYLAND_LIBDECOR=$sdl_ui -D SDL_WAYLAND_LIBDECOR_SHARED=$sdl_ui -D SDL_WAYLAND_QT_TOUCH=OFF -D SDL_RPI=OFF -D SDL_VIVANTE=OFF \
-		-D SDL_VULKAN=OFF -D SDL_KMSDRM=$sdl_ui -D SDL_KMSDRM_SHARED=$sdl_ui -D SDL_OFFSCREEN=$sdl_ui -D SDL_RENDER=$sdl_ui -D SDL_GPU=OFF \
-		-D SDL_DIALOG=OFF -D SDL_OPENGL=OFF -D SDL_OPENGLES=OFF \
+		-D SDL_WAYLAND_LIBDECOR=$sdl_ui -D SDL_WAYLAND_LIBDECOR_SHARED=$sdl_ui -D SDL_RPI=OFF -D SDL_VIVANTE=OFF \
+		-D SDL_VULKAN=OFF -D SDL_KMSDRM=$sdl_ui -D SDL_KMSDRM_SHARED=$sdl_ui -D SDL_OFFSCREEN=$sdl_ui -D SDL_RENDER=$sdl_ui \
+		-D SDL_GPU=OFF -D SDL_DIALOG=OFF -D SDL_OPENGL=$sdl_ui -D SDL_OPENGLES=OFF \
 		\
 		-D SDL_UNIX_CONSOLE_BUILD=ON -D SDL_TEST_LIBRARY=OFF -D SDL_TESTS=OFF \
 		\
 		-D SDL_JOYSTICK=ON -D SDL_HIDAPI_JOYSTICK=ON -D SDL_VIRTUAL_JOYSTICK=ON \
 		\
-		-D SDL_ATOMIC=OFF -D SDL_EVENTS=ON -D SDL_HAPTIC=OFF -D SDL_POWER=OFF -D SDL_THREADS=ON -D SDL_TIMERS=ON -D SDL_FILE=OFF \
-		-D SDL_LOADSO=ON -D SDL_CPUINFO=ON -D SDL_FILESYSTEM=$sdl_ui -D SDL_DLOPEN=OFF -D SDL_SENSOR=OFF -D SDL_LOCALE=OFF \
+		-D SDL_CAMERA=OFF -D SDL_HAPTIC=OFF -D SDL_POWER=OFF -D SDL_SENSOR=OFF -D SDL_TRAY=OFF \
 		\
-		-D SDL_CAMERA=OFF \
-		\
-		-D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" \
+		-D "CMAKE_BUILD_TYPE=$cmake_build_type" -D "CMAKE_TOOLCHAIN_FILE=$toolchain_file" -D "CMAKE_INSTALL_PREFIX=$cwd_root/archive_tmp/usr" \
 		-S "$prefix" -B "$prefix_build" || exit 99
-	cmake --build "$prefix_build" -j$(nproc) || exit 99
+	cmake --build "$prefix_build" -j $build_threads || exit 99
 	cmake --install "$prefix_build" || exit 99
 
-	# We rely on the host to provide Vulkan libs to sidestep any potential
-	# dependency issues. While Qt expects libvulkan.so, at least Debian only
-	# ships libvulkan.so.1 without a symlink, so make our own as a workaround.
-	# The relative paths prevent appimage-builder from flattening the links.
-	mkdir -p "archive_tmp/usr/lib/$libdir"
-	relroot="../../../../../../../../../../../../../../../../../../../../../../../../../../../../.."
-	ln -s "$relroot/usr/lib/libvulkan.so.1" "archive_tmp/usr/lib/libvulkan.so"
-	ln -s "$relroot/usr/lib/$libdir/libvulkan.so.1" "archive_tmp/usr/lib/$libdir/libvulkan.so"
-
-	# The FluidSynth packaged by Debian bullseye is ABI incompatible with
-	# the newer version we compile, despite sharing a major version. Since we
-	# don't run into the one breaking ABI change they made, just symlink it.
-	ln -s "$(readlink "archive_tmp/usr/lib/libfluidsynth.so.3")" "archive_tmp/usr/lib/libfluidsynth.so.2"
-
-	# Archive Discord Game SDK library.
-	7z e -y -o"archive_tmp/usr/lib" "$discord_zip" "lib/$arch_discord/discord_game_sdk.so"
-	[ ! -e "archive_tmp/usr/lib/discord_game_sdk.so" ] && echo [!] No Discord Game SDK for architecture [$arch_discord]
+	# Workaround for Qt 6 on ancient distros without GLVND: build a shim listing
+	# the two GLVND libs (and the compatibility libGL which may be absent on
+	# some environments) as auxiliary filtees, which the dynamic linker loads if
+	# present and skips if not. AppImageBuilder.yml then points the two GLVND
+	# dependencies to this shim, which cannot be named after any of them, as the
+	# host's GLVND libGL would then pick it up instead of the real libGLX.
+	echo | "$cc_binary" -shared -nostdlib -o "archive_tmp/usr/lib/libglshim.so" -Wl,-soname,libglshim.so \
+		-Wl,--auxiliary=libGLX.so.0 -Wl,--auxiliary=libOpenGL.so.0 -Wl,--auxiliary=libGL.so.1 -x c -
 
 	# Archive self-built libraries.
 	mv "archive_tmp/mdsx.so" "archive_tmp/libaaruformat.so" "archive_tmp/librashader.so" "archive_tmp/usr/lib/"
 
 	# Archive readme with library package versions.
 	echo Libraries used to compile this $arch build of $project: > archive_tmp/README
-	dpkg-query -f '${Package} ${Version}\n' -W $libpkgs | sed "s/-dev / /" | sed "s/qtdeclarative/qt/" | while IFS=" " read pkg version
+	dpkg-query -f '${Package} ${Version}\n' -W $libpkgs | sed "s/-dev / /" | sed "s/-declarative//" | while IFS=" " read pkg version
 	do
 		for i in $(seq $(expr $longest_libpkg - $(echo -n $pkg | wc -c)))
 		do
@@ -1310,7 +1309,7 @@ EOF
 	# --appdir is a workaround for appimage-builder issue 270 reported by us.
 	for retry in 1 2 3 4 5
 	do
-		project="$project" project_id="$project_id" project_version="$project_version" project_icon="$project_icon" arch_deb="$arch_deb" \
+		project="$project" project_id="$project_id" project_version="$project_version" project_icon="$project_icon" libdir="$libdir" arch_deb="$arch_deb" \
 			arch_appimage="$arch_appimage" appimage_path="$cwd/$package_name.AppImage" "$appimage_builder_dir/bin/appimage-builder" \
 			--recipe AppImageBuilder-generated.yml --appdir "$(grep -oP '^\s+path: \K(.+)' AppImageBuilder-generated.yml)"
 		status=$?
@@ -1329,8 +1328,7 @@ then
 fi
 
 # Notarize the compressed app bundle if we're on macOS.
-status=0
-mac_notarize "$zip_name" || status=50
+mac_notarize "$zip_name" && status=0 || status=50
 
 # All good.
 echo [-] Build of [$package_name] for [$arch] with flags [$cmake_flags] successful

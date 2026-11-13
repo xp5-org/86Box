@@ -137,8 +137,9 @@ null_data_seg(x86seg *s)
     s->access  = 0x80;
     s->ar_high = 0x10;
     s->base    = -1;
+    s->checked = 0;
     if (s == &cpu_state.seg_ds)
-        cpu_cur_status |= CPU_STATUS_NOTFLATDS;
+        cpu_cur_status |= CPU_STATUS_NOTFLATDS | CPU_STATUS_NOTWIDEDS;
     if (s == &cpu_state.seg_es)
         cpu_cur_status |= CPU_STATUS_NOTFLATES;
 }
@@ -180,9 +181,14 @@ x86_doabrt(int x86_abrt)
 
     task_eip_pending = 0;
     if (msw & 1) {
+        /* A fault: the EFLAGS image the handler gets has RF set, so that its
+           IRET restarts the instruction without an instruction breakpoint on
+           it firing again. The handler itself runs with RF clear. */
+        cpu_state.eflags |= RF_FLAG;
         task_error_follows = 1;
         op_pmodeint(x86_abrt, 0);
         task_error_follows = 0;
+        cpu_state.eflags &= ~RF_FLAG;
     } else {
         uint32_t addr = (x86_abrt << 2) + idt.base;
         if (stack32) {
@@ -286,6 +292,7 @@ do_seg_load(x86seg *s, uint16_t *segdat)
     s->base |= ((word3 >> 8) << 24);
     s->access  = segdat[2] >> 8;
     s->ar_high = word3 & 0xff;
+    s->checked = 0;
 
     if (((segdat[2] & 0x1800) != 0x1000) || !(segdat[2] & (1 << 10))) {
         /* Expand-down */
@@ -314,6 +321,8 @@ do_seg_load(x86seg *s, uint16_t *segdat)
         else
             cpu_cur_status |= CPU_STATUS_NOTFLATSS;
     }
+    cpu_set_wide_status(s);
+    cpu_mark_64k_status(s);
 }
 #endif
 
@@ -325,6 +334,7 @@ do_seg_v86_init(x86seg *s)
     s->limit      = 0xffff;
     s->limit_low  = 0;
     s->limit_high = 0xffff;
+    s->checked    = 1;
 }
 
 static void
@@ -408,8 +418,9 @@ loadseg(uint16_t seg, x86seg *s)
             s->access  = 0x80;
             s->ar_high = 0x10;
             s->base    = -1;
+            s->checked = 0;
             if (s == &cpu_state.seg_ds)
-                cpu_cur_status |= CPU_STATUS_NOTFLATDS;
+                cpu_cur_status |= CPU_STATUS_NOTFLATDS | CPU_STATUS_NOTWIDEDS;
             if (s == &cpu_state.seg_es)
                 cpu_cur_status |= CPU_STATUS_NOTFLATES;
             return 0;
@@ -504,9 +515,9 @@ loadseg(uint16_t seg, x86seg *s)
         s->checked   = 0;
 #ifdef USE_DYNAREC
         if (s == &cpu_state.seg_ds)
-            codegen_flat_ds = 0;
+            codegen_flat_ds = codegen_wide_ds = 0;
         if (s == &cpu_state.seg_ss)
-            codegen_flat_ss = 0;
+            codegen_flat_ss = codegen_wide_ss = 0;
         if (s == &cpu_state.seg_es)
             codegen_flat_es = 0;
 #endif
@@ -523,9 +534,9 @@ loadseg(uint16_t seg, x86seg *s)
             do_seg_v86_init(s);
 #ifdef USE_DYNAREC
         if (s == &cpu_state.seg_ds)
-            codegen_flat_ds = 0;
+            codegen_flat_ds = codegen_wide_ds = 0;
         if (s == &cpu_state.seg_ss)
-            codegen_flat_ss = 0;
+            codegen_flat_ss = codegen_wide_ss = 0;
         if (s == &cpu_state.seg_es)
             codegen_flat_es = 0;
 #endif
@@ -551,6 +562,7 @@ loadseg(uint16_t seg, x86seg *s)
         else
             cpu_cur_status |= CPU_STATUS_NOTFLATSS;
     }
+    cpu_set_wide_status(s);
 
     return cpu_state.abrt;
 }
@@ -612,7 +624,7 @@ loadcs(uint16_t seg)
             do_seg_load(&cpu_state.seg_cs, segdat);
             use32 = (segdat[3] & 0x40) ? 0x300 : 0;
             if ((CPL == 3) && (oldcpl != 3))
-                flushmmucache_nopc();
+                flushmmucache_ring3();
             oldcpl = CPL;
 
             cpl_override = 1;
@@ -634,8 +646,9 @@ loadcs(uint16_t seg)
         cpu_state.seg_cs.seg        = seg & 0xffff;
         cpu_state.seg_cs.access     = (cpu_state.eflags & VM_FLAG) ? 0xe2 : 0x82;
         cpu_state.seg_cs.ar_high    = 0x10;
+        cpu_state.seg_cs.checked    = 1;
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
     }
 }
@@ -722,6 +735,11 @@ loadcsjmp(uint16_t seg, uint32_t old_pc)
             return;
         x86seg_log("%04X %04X %04X %04X\n", segdat[0], segdat[1], segdat[2], segdat[3]);
         if (segdat[2] & 0x1000) {
+            /* Reject data segments before loading CS. */
+            if (!(segdat[2] & 0x0800)) {
+                x86gpf("loadcsjmp(): Target is not executable", seg & 0xfffc);
+                return;
+            }
             /* Normal code segment */
             if (!(segdat[2] & 0x0400)) {
                 /* Not conforming */
@@ -753,7 +771,7 @@ loadcsjmp(uint16_t seg, uint32_t old_pc)
 
             do_seg_load(&cpu_state.seg_cs, segdat);
             if ((CPL == 3) && (oldcpl != 3))
-                flushmmucache_nopc();
+                flushmmucache_ring3();
             oldcpl = CPL;
             cycles -= timing_jmp_pm;
         } else { /* System segment */
@@ -832,7 +850,7 @@ loadcsjmp(uint16_t seg, uint32_t old_pc)
                                 cpu_state.seg_cs.access = (cpu_state.seg_cs.access & ~0x60) | (jmp_cpl << 5);
                             }
                             if ((CPL == 3) && (oldcpl != 3))
-                                flushmmucache_nopc();
+                                flushmmucache_ring3();
                             oldcpl = CPL;
                             set_use32(segdat[3] & 0x40);
                             cpu_state.pc = newpc;
@@ -875,8 +893,9 @@ loadcsjmp(uint16_t seg, uint32_t old_pc)
         cpu_state.seg_cs.seg        = seg;
         cpu_state.seg_cs.access     = (cpu_state.eflags & VM_FLAG) ? 0xe2 : 0x82;
         cpu_state.seg_cs.ar_high    = 0x10;
+        cpu_state.seg_cs.checked    = 1;
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
         cycles -= timing_jmp_rm;
     }
@@ -1033,6 +1052,11 @@ loadcscall(uint16_t seg, uint32_t old_pc)
 
         x86seg_log("Code seg call - %04X - %04X %04X %04X\n", seg, segdat[0], segdat[1], segdat[2]);
         if (segdat[2] & 0x1000) {
+            /* Reject data segments before pushing the return address. */
+            if (!(segdat[2] & 0x0800)) {
+                x86gpf("loadcscall(): Target is not executable", seg & 0xfffc);
+                return;
+            }
             if (!(segdat[2] & 0x0400)) { /* Not conforming */
                 if ((seg & 0x0003) > CPL) {
                     x86gpf("loadcscall(): Non-conforming RPL > CPL", seg & 0xfffc);
@@ -1066,7 +1090,7 @@ loadcscall(uint16_t seg, uint32_t old_pc)
             CS = seg;
             do_seg_load(&cpu_state.seg_cs, segdat);
             if ((CPL == 3) && (oldcpl != 3))
-                flushmmucache_nopc();
+                flushmmucache_ring3();
             oldcpl = CPL;
 #ifdef ENABLE_X86SEG_LOG
             x86seg_log("Complete\n");
@@ -1207,7 +1231,7 @@ loadcscall(uint16_t seg, uint32_t old_pc)
                                 CS = (seg2 & ~3) | DPL;
                                 do_seg_load(&cpu_state.seg_cs, segdat);
                                 if ((CPL == 3) && (oldcpl != 3))
-                                    flushmmucache_nopc();
+                                    flushmmucache_ring3();
                                 oldcpl = CPL;
                                 set_use32(segdat[3] & 0x0040);
                                 cpu_state.pc = newpc;
@@ -1321,7 +1345,7 @@ loadcscall(uint16_t seg, uint32_t old_pc)
                                 cpu_state.seg_cs.access = (cpu_state.seg_cs.access & ~0x60) | (call_cpl << 5);
                             }
                             if ((CPL == 3) && (oldcpl != 3))
-                                flushmmucache_nopc();
+                                flushmmucache_ring3();
                             oldcpl = CPL;
                             set_use32(segdat[3] & 0x0040);
                             cpu_state.pc = newpc;
@@ -1365,8 +1389,9 @@ loadcscall(uint16_t seg, uint32_t old_pc)
         cpu_state.seg_cs.seg        = seg;
         cpu_state.seg_cs.access     = (cpu_state.eflags & VM_FLAG) ? 0xe2 : 0x82;
         cpu_state.seg_cs.ar_high    = 0x10;
+        cpu_state.seg_cs.checked    = 1;
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
     }
 }
@@ -1442,12 +1467,6 @@ pmoderetf(int is32, uint16_t off)
     if (CPL == (seg & 0x0003)) {
         x86seg_log("RETF CPL = RPL  %04X\n", segdat[2]);
         switch (segdat[2] & 0x1f00) {
-            case 0x1000:
-            case 0x1100:
-            case 0x1200:
-            case 0x1300:
-                 /* Data segment, apparently valid when CPL is the same, used by MS LINK for DOS. */
-                 fallthrough;
             case 0x1800:
             case 0x1900:
             case 0x1a00:
@@ -1490,19 +1509,13 @@ pmoderetf(int is32, uint16_t off)
         do_seg_load(&cpu_state.seg_cs, segdat);
         cpu_state.seg_cs.access = (cpu_state.seg_cs.access & ~(3 << 5)) | ((CS & 3) << 5);
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
         set_use32(segdat[3] & 0x0040);
 
         cycles -= timing_retf_pm;
     } else {
         switch (segdat[2] & 0x1f00) {
-            case 0x1000:
-            case 0x1100:
-            case 0x1200:
-            case 0x1300:
-                 /* Data segment, apparently valid when CPL is the same, used by MS LINK for DOS. */
-                 fallthrough;
             case 0x1800:
             case 0x1900:
             case 0x1a00:
@@ -1613,7 +1626,7 @@ pmoderetf(int is32, uint16_t off)
         CS           = seg;
         do_seg_load(&cpu_state.seg_cs, segdat);
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
         set_use32(segdat[3] & 0x0040);
 
@@ -1663,7 +1676,7 @@ pmodeint(int num, int soft)
     if ((addr + 7) > idt.limit) {
         if (num == 0x08) {
             /* Triple fault - reset! */
-            softresetx86();
+            softresetx86_from(SOFT_RESET_SHUTDOWN);
             cpu_set_edx();
         } else if (num == 0x0d) {
             op_pmodeint(8, 0);
@@ -1906,7 +1919,7 @@ pmodeint(int num, int soft)
             CS                      = (seg & 0xfffc) | new_cpl;
             cpu_state.seg_cs.access = (cpu_state.seg_cs.access & ~0x60) | (new_cpl << 5);
             if ((CPL == 3) && (oldcpl != 3))
-                flushmmucache_nopc();
+                flushmmucache_ring3();
             oldcpl = CPL;
             if (type > 0x0800)
                 cpu_state.pc = segdat[0] | (segdat[3] << 16);
@@ -2025,6 +2038,7 @@ pmodeiret(int is32)
         cpu_state.seg_cs.limit_high = 0xffff;
         cpu_state.seg_cs.access |= 0x80;
         cpu_state.seg_cs.ar_high = 0x10;
+        cpu_state.seg_cs.checked = 1;
         CS                       = seg;
         cpu_state.flags          = (cpu_state.flags & 0x3000) | (tempflags & 0xcfd5) | 2;
         /* IRETD in V86 mode loads all but VM, IOPL, VIP and VIF */
@@ -2037,8 +2051,10 @@ pmodeiret(int is32)
 
     if (cpu_state.flags & NT_FLAG) {
         /* The back link must name a global, busy, present TSS: #TS(back
-           link) on the 80286, 386, Intel486 and Pentium books, #GP on the
-           P6 book; #NP(back link) when not present */
+           link), or #NP(back link) when not present. The P6-era manual's
+           #GP here is a documentation error, corrected to #TS by the IA-32
+           SDM Documentation Changes (252046-001, item 3); Win4Lin's monitor
+           runs the Windows VMM with NT set and relies on that #TS. */
         cpl_override = 1;
         seg  = readmemw(tr.base, 0);
         cpl_override = 0;
@@ -2046,20 +2062,14 @@ pmodeiret(int is32)
             return;
         addr = seg & 0xfff8;
         if ((seg & 0x0004) || ((addr + 7) > gdt.limit)) {
-            if (is_p6)
-                x86gpf("pmodeiret(): back link local or past the GDT limit", seg & 0xfffc);
-            else
-                x86ts("pmodeiret(): back link local or past the GDT limit", seg & 0xfffc);
+            x86ts("pmodeiret(): back link local or past the GDT limit", seg & 0xfffc);
             return;
         }
         read_descriptor(gdt.base + addr, segdat, segdat32, 1);
         if (cpu_state.abrt)
             return;
         if (((segdat[2] & 0x1f00) != 0x0300) && (!is386 || ((segdat[2] & 0x1f00) != 0x0b00))) {
-            if (is_p6)
-                x86gpf("pmodeiret(): back link not a busy TSS", seg & 0xfffc);
-            else
-                x86ts("pmodeiret(): back link not a busy TSS", seg & 0xfffc);
+            x86ts("pmodeiret(): back link not a busy TSS", seg & 0xfffc);
             return;
         }
         if (!(segdat[2] & 0x8000)) {
@@ -2111,7 +2121,7 @@ pmodeiret(int is32)
             do_seg_v86_init(&cpu_state.seg_es);
             op_loadseg(segs[1], &cpu_state.seg_ds);
             do_seg_v86_init(&cpu_state.seg_ds);
-            cpu_cur_status |= CPU_STATUS_NOTFLATDS | CPU_STATUS_NOTFLATES;
+            cpu_cur_status |= CPU_STATUS_NOTFLATDS | CPU_STATUS_NOTFLATES | CPU_STATUS_NOTWIDEDS;
             op_loadseg(segs[2], &cpu_state.seg_fs);
             do_seg_v86_init(&cpu_state.seg_fs);
             op_loadseg(segs[3], &cpu_state.seg_gs);
@@ -2125,14 +2135,16 @@ pmodeiret(int is32)
             CS                          = seg;
             cpu_state.seg_cs.access     = 0xe2;
             cpu_state.seg_cs.ar_high    = 0x10;
+            cpu_state.seg_cs.checked    = 1;
             if ((CPL == 3) && (oldcpl != 3))
-                flushmmucache_nopc();
+                flushmmucache_ring3();
             oldcpl = CPL;
 
             ESP = newsp;
             op_loadseg(newss, &cpu_state.seg_ss);
             do_seg_v86_init(&cpu_state.seg_ss);
-            cpu_cur_status |= CPU_STATUS_NOTFLATSS;
+            cpu_cur_status |= CPU_STATUS_NOTFLATSS | CPU_STATUS_NOTWIDESS;
+            cpu_update_64k_status();
             use32 = 0;
             cpu_cur_status &= ~CPU_STATUS_USE32;
             cpu_state.flags = (tempflags & 0xffd5) | 2;
@@ -2215,7 +2227,7 @@ pmodeiret(int is32)
         do_seg_load(&cpu_state.seg_cs, segdat);
         cpu_state.seg_cs.access = (cpu_state.seg_cs.access & ~0x60) | ((CS & 0x0003) << 5);
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
         set_use32(segdat[3] & 0x0040);
 
@@ -2302,7 +2314,7 @@ pmodeiret(int is32)
         do_seg_load(&cpu_state.seg_cs, segdat);
         cpu_state.seg_cs.access = (cpu_state.seg_cs.access & ~0x60) | ((CS & 3) << 5);
         if ((CPL == 3) && (oldcpl != 3))
-            flushmmucache_nopc();
+            flushmmucache_ring3();
         oldcpl = CPL;
         set_use32(segdat[3] & 0x40);
 
@@ -2471,9 +2483,9 @@ task_load_seg(x86seg *s, uint16_t sel, const uint16_t *sd, uint32_t addr)
     }
 #ifdef USE_DYNAREC
     if (s == &cpu_state.seg_ds)
-        codegen_flat_ds = 0;
+        codegen_flat_ds = codegen_wide_ds = 0;
     if (s == &cpu_state.seg_ss)
-        codegen_flat_ss = 0;
+        codegen_flat_ss = codegen_wide_ss = 0;
     if (s == &cpu_state.seg_es)
         codegen_flat_es = 0;
 #endif
@@ -2495,6 +2507,7 @@ task_load_seg(x86seg *s, uint16_t sel, const uint16_t *sd, uint32_t addr)
         else
             cpu_cur_status |= CPU_STATUS_NOTFLATSS;
     }
+    cpu_set_wide_status(s);
 }
 
 /* CS of the new task, its checks made. CPL is the selector's RPL: "The new
@@ -2849,12 +2862,10 @@ taskswitch286(uint16_t seg, uint16_t *segdat, int is32)
     for (int i = 0; i < 8; i++)
         cpu_state.regs[i].l = is32 ? img.regs[i] : (img.regs[i] | 0xffff0000);
 
-#ifdef USE_DEBUG_REGS_486
-    dr[7] &= 0xFFFFFFAA;
-#else
-    if (!cpu_use_exec)
+    if (cpu_debug_regs_486 || !cpu_use_exec) {
         dr[7] &= 0xFFFFFFAA;
-#endif
+        cpu_dr7_update();
+    }
 
     /* "The processor first loads all the segment registers with segment
        selectors from the TSS, then checks their contents for validity"
@@ -2891,13 +2902,10 @@ taskswitch286(uint16_t seg, uint16_t *segdat, int is32)
 
     if (is386 ? !task_checks_386(&img, cpl, ext) : !task_checks_286(&img, cpl, ext))
         return;
+    cpu_update_64k_status();
 
-#ifdef USE_DEBUG_REGS_486
-    rf_flag_no_clear = 1;
-#else
-    if (!cpu_use_exec)
+    if (cpu_debug_regs_486 || !cpu_use_exec)
         rf_flag_no_clear = 1;
-#endif
 
     /* An exception's error code goes on the new task's stack before its
        EIP is checked: x86_doabrt() makes that check after the push */
@@ -2910,14 +2918,10 @@ taskswitch286(uint16_t seg, uint16_t *segdat, int is32)
     }
 
     if (img.t_bit) {
-#ifdef USE_DEBUG_REGS_486
-        trap |= 2;
-#else
-        if (cpu_use_exec)
+        if (cpu_use_exec && !cpu_debug_regs_486)
             trap = 2;
         else
             trap |= 2;
-#endif
 #ifdef USE_DYNAREC
         cpu_block_end = 1;
 #endif
@@ -2966,6 +2970,14 @@ cyrix_load_seg_descriptor(uint32_t addr, x86seg *seg)
         do_seg_load(seg, segdat);
         seg->seg     = selector;
         seg->checked = 0;
+#ifdef USE_DYNAREC
+        if (seg == &cpu_state.seg_ds)
+            codegen_flat_ds = codegen_wide_ds = 0;
+        if (seg == &cpu_state.seg_ss)
+            codegen_flat_ss = codegen_wide_ss = 0;
+        if (seg == &cpu_state.seg_es)
+            codegen_flat_es = 0;
+#endif
         if (seg == &cpu_state.seg_ds) {
             if (seg->base == 0 && seg->limit_low == 0 && seg->limit_high == 0xffffffff)
                 cpu_cur_status &= ~CPU_STATUS_NOTFLATDS;

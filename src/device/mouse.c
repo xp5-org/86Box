@@ -122,6 +122,7 @@ static mouse_t mouse_devices[] = {
     { &mouse_msserial_ballpoint_device },
     { &mouse_ltserial_device           },
     { &mouse_ps2_device                },
+    { &mouse_usb_device                },
 #ifdef USE_STANDALONE_QUICKPORT
     { &mouse_upc_standalone_device     },
 #endif
@@ -140,6 +141,7 @@ static mouse_t tablet_devices[] = {
     { &mouse_ibm7690_touch_device        },
     { &mouse_cga_lightpen_device        },
     { &mouse_pxl_380_device             },
+    { &tablet_usb_device                },
     { NULL                              }
 };
 
@@ -243,7 +245,7 @@ mouse_scale_coord_x(double x, int mul)
     double ratio = 1.0;
 
     if (!mouse_raw)        
-        ratio = ((double) monitors[0].mon_unscaled_size_x) / monitors[0].mon_res_x;
+        ratio = ((double) monitors[0].mon_unscaled_size_x) / monitors[0].mon_picture_x;
 
     if (mul)
         x *= ratio;
@@ -259,7 +261,7 @@ mouse_scale_coord_y(double y, int mul)
     double ratio = 1.0;
 
     if (!mouse_raw)        
-        ratio = ((double) monitors[0].mon_efscrnsz_y) / monitors[0].mon_res_y;
+        ratio = ((double) monitors[0].mon_efscrnsz_y) / monitors[0].mon_picture_y;
 
     if (mul)
         y *= ratio;

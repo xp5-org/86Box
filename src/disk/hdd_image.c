@@ -58,7 +58,7 @@ typedef struct hdd_image_t {
     plat_device_vol_locked_t *locked_drives;
 } hdd_image_t;
 
-hdd_image_t hdd_images[HDD_NUM];
+hdd_image_t hdd_images[HDD_SLOTS];
 
 static char  empty_sector[512];
 
@@ -601,6 +601,11 @@ hdd_image_read(uint8_t id, uint32_t sector, uint32_t count, uint8_t *buffer)
     int    non_transferred_sectors;
     size_t num_read;
 
+#ifndef IS_TEST
+    if (HDD_IS_RDISK_SLOT(id))
+        return rdisk_ata_read(id - HDD_NUM, sector, count, buffer);
+#endif
+
     if (hdd_images[id].type == HDD_IMAGE_VHD) {
         hdd_images[id].vhd->error = 0;
         non_transferred_sectors   = mvhd_read_sectors(hdd_images[id].vhd, sector, count, buffer);
@@ -625,6 +630,11 @@ hdd_image_read(uint8_t id, uint32_t sector, uint32_t count, uint8_t *buffer)
 uint32_t
 hdd_image_get_last_sector(uint8_t id)
 {
+#ifndef IS_TEST
+    if (HDD_IS_RDISK_SLOT(id))
+        return rdisk_ata_last_sector(id - HDD_NUM);
+#endif
+
     return hdd_images[id].last_sector;
 }
 
@@ -656,6 +666,11 @@ hdd_image_write(uint8_t id, uint32_t sector, uint32_t count, uint8_t *buffer)
 {
     int    non_transferred_sectors;
     size_t num_write;
+
+#ifndef IS_TEST
+    if (HDD_IS_RDISK_SLOT(id))
+        return rdisk_ata_write(id - HDD_NUM, sector, count, buffer);
+#endif
 
 #ifdef USE_RMM
     if (rmm_disk_armed || rmm_disk_track)
@@ -704,6 +719,12 @@ hdd_image_write_ex(uint8_t id, uint32_t sector, uint32_t count, uint8_t *buffer)
 int
 hdd_image_zero(uint8_t id, uint32_t sector, uint32_t count)
 {
+#ifndef IS_TEST
+    if (HDD_IS_RDISK_SLOT(id))
+        return rdisk_ata_zero(id - HDD_NUM, sector, count);
+#endif
+
+
 
 #ifdef USE_RMM
     if (rmm_disk_armed || rmm_disk_track)

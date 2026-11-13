@@ -21,6 +21,10 @@ add_library(vid OBJECT
     video.c
     vid_table.c
 
+    # PowerVR PCX1/PCX2 add-on
+    vid_powervr_pcx.c
+    vid_powervr_pcx_render.c
+
     # RAMDAC (Should this be its own library?)
     ramdac/vid_ramdac_ati68860.c
     ramdac/vid_ramdac_ati68875.c 
@@ -72,8 +76,11 @@ add_library(vid OBJECT
 
     # PCjr/PC JX/Tandy
     vid_pcjr.c
+    vid_pcjr_comp.c
     vid_pcjx.c
-    vid_tandy.c
+    vid_tandy1k.c
+    vid_tandy2k.c
+    vid_tandy_vis.c
 
     # Hercules
     vid_mda.c
@@ -85,6 +92,7 @@ add_library(vid OBJECT
     vid_3270pc.c
     vid_genius.c
     vid_sigma.c
+    vid_vaxmate.c
 
     # PGC / IM1024 / WY700 high-resolution
     vid_pgc.c
@@ -120,6 +128,8 @@ add_library(vid OBJECT
     vid_ati_mach64.c
     vid_ati_mach64_accel.c
     vid_ati_mach64_3d.c
+    vid_ati_mach64_ragepro.c
+    vid_ati_mach64_idct.c
     vid_ati_rage128.c
     vid_ati_rage128_vga.c
     vid_ati_rage128_display.c
@@ -137,6 +147,7 @@ add_library(vid OBJECT
     vid_ati_rage128_maxx.c
 
     # Chips & Technologies
+    vid_chips_45x.c
     vid_chips_69000.c
 
     # Cirrus Logic
@@ -154,6 +165,7 @@ add_library(vid OBJECT
     # Paradise
     vid_paradise.c
     vid_wd90c31.c
+    vid_wd90c33.c
     vid_rtg310x.c
     vid_f82c425.c
     vid_ti_cf62011.c
@@ -166,6 +178,9 @@ add_library(vid OBJECT
     vid_s3.c 
     vid_s3_virge.c
 
+    # Weitek
+    vid_p9100.c
+
     # SiS
     vid_sis6306.c
 
@@ -177,8 +192,8 @@ add_library(vid OBJECT
 
     # Generic
     vid_bochs_vbe.c
+    vid_cyrix_gxm.c
     vid_hd44780.c
-    vid_tandy_vis.c
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
@@ -187,6 +202,12 @@ endif()
 
 if(G100)
     target_compile_definitions(vid PRIVATE USE_G100)
+endif()
+
+# PowerVR PCX: chip, revision, interrupt-ack, render-time and debug settings
+# for testing against hardware; ordinary builds use the measured m3D values.
+if(POWERVR_PCX_DEV)
+    target_compile_definitions(vid PRIVATE USE_POWERVR_PCX_DEV)
 endif()
 
 if(XL24)

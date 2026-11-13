@@ -916,6 +916,8 @@ video_monitor_init(int index)
     monitors[index].mon_ysize                            = 480;
     monitors[index].mon_res_x                            = 640;
     monitors[index].mon_res_y                            = 480;
+    monitors[index].mon_picture_x                        = 640;
+    monitors[index].mon_picture_y                        = 480;
     monitors[index].mon_scrnsz_x                         = 640;
     monitors[index].mon_scrnsz_y                         = 480;
     monitors[index].mon_efscrnsz_y                       = 480;
@@ -1023,7 +1025,7 @@ video_init(void)
 
     video_8togs = calloc(4, 256);
     for (uint16_t c = 0; c < 256; c++)
-        video_8togs[c] = c | (c << 16) | (c << 24);
+        video_8togs[c] = c | (c << 8) | (c << 16);
 
     video_8to32 = calloc(4, 256);
     for (uint16_t c = 0; c < 256; c++)

@@ -43,6 +43,9 @@ jcc_dynamic_start(codeblock_t *block, uint32_t op_pc, int size, uint32_t next_pc
     /* A displacement on another page than the block start is not covered by the
        physical page checks made when the block is looked up. */
     jcc_dynamic.active = (block->flags & CODEBLOCK_NO_IMMEDIATES) && !(((cs + op_pc + size - 1) ^ block->pc) & ~0xfff);
+    /* The interpreter's op reads the displacement before it branches, so its
+       walk goes ahead of the taken exit, not with the mark at the end. */
+    codegen_fetch_walk_mark(block, cs + op_pc, size);
 }
 
 static void
@@ -100,6 +103,8 @@ ropJO_common(UNUSED(codeblock_t *block), ir_data_t *ir, uint32_t dest_addr, UNUS
 {
     int jump_uop;
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ZN16:
@@ -124,7 +129,7 @@ ropJO_common(UNUSED(codeblock_t *block), ir_data_t *ir, uint32_t dest_addr, UNUS
 
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_VF_SET);
+            uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_VF_SET);
             jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
             break;
     }
@@ -137,6 +142,8 @@ ropJNO_common(UNUSED(codeblock_t *block), ir_data_t *ir, uint32_t dest_addr, UNU
 {
     int jump_uop;
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ZN16:
@@ -162,7 +169,7 @@ ropJNO_common(UNUSED(codeblock_t *block), ir_data_t *ir, uint32_t dest_addr, UNU
 
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_VF_SET);
+            uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_VF_SET);
             jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
             break;
     }
@@ -175,8 +182,11 @@ static int
 ropJB_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t next_pc)
 {
     int jump_uop;
+    int cf_reg;
     int do_unroll = (CF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ZN16:
@@ -205,13 +215,37 @@ ropJB_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t nex
                 jump_uop = uop_CMP_JNB_DEST(ir, IREG_flags_op1, IREG_flags_op2);
             break;
 
+        case FLAGS_ADD8:
+        case FLAGS_ADD16:
+        case FLAGS_ADD32:
+            /*CF = (res < op1) -- unsigned overflow, works for all sizes since MOVZX'd*/
+            if (do_unroll)
+                jump_uop = uop_CMP_JB_DEST(ir, IREG_flags_res, IREG_flags_op1);
+            else
+                jump_uop = uop_CMP_JNB_DEST(ir, IREG_flags_res, IREG_flags_op1);
+            break;
+
+        case FLAGS_INC8:
+        case FLAGS_INC16:
+        case FLAGS_INC32:
+        case FLAGS_DEC8:
+        case FLAGS_DEC16:
+        case FLAGS_DEC32:
+            /*INC/DEC preserve CF in cpu_state.flags*/
+            uop_AND_IMM(ir, IREG_temp0_W, IREG_flags, C_FLAG);
+            if (do_unroll)
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0_W, 0);
+            else
+                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0_W, 0);
+            break;
+
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_CF_SET);
+            cf_reg = codegen_flags_jcc_read(ir, C_FLAG);
             if (do_unroll)
-                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, cf_reg, 0);
             else
-                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
+                jump_uop = uop_CMP_IMM_JZ_DEST(ir, cf_reg, 0);
             break;
     }
     if (do_unroll) {
@@ -226,8 +260,11 @@ static int
 ropJNB_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t next_pc)
 {
     int jump_uop;
+    int cf_reg;
     int do_unroll = (!CF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ZN16:
@@ -257,13 +294,37 @@ ropJNB_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
                 jump_uop = uop_CMP_JB_DEST(ir, IREG_flags_op1, IREG_flags_op2);
             break;
 
+        case FLAGS_ADD8:
+        case FLAGS_ADD16:
+        case FLAGS_ADD32:
+            /*CF = (res < op1) -- unsigned overflow, works for all sizes since MOVZX'd*/
+            if (do_unroll)
+                jump_uop = uop_CMP_JNB_DEST(ir, IREG_flags_res, IREG_flags_op1);
+            else
+                jump_uop = uop_CMP_JB_DEST(ir, IREG_flags_res, IREG_flags_op1);
+            break;
+
+        case FLAGS_INC8:
+        case FLAGS_INC16:
+        case FLAGS_INC32:
+        case FLAGS_DEC8:
+        case FLAGS_DEC16:
+        case FLAGS_DEC32:
+            /*INC/DEC preserve CF in cpu_state.flags*/
+            uop_AND_IMM(ir, IREG_temp0_W, IREG_flags, C_FLAG);
+            if (do_unroll)
+                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0_W, 0);
+            else
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0_W, 0);
+            break;
+
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_CF_SET);
+            cf_reg = codegen_flags_jcc_read(ir, C_FLAG);
             if (do_unroll)
-                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
+                jump_uop = uop_CMP_IMM_JZ_DEST(ir, cf_reg, 0);
             else
-                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, cf_reg, 0);
             break;
     }
     if (do_unroll) {
@@ -280,11 +341,14 @@ static int
 ropJE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t next_pc)
 {
     int jump_uop;
+    int zf_reg;
 
     if (ZF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr)) {
+        if (codegen_flags_changed && flags_res_valid())
+            codegen_flags_known_use(ir, 0);
         if (!codegen_flags_changed || !flags_res_valid()) {
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-            jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
+            zf_reg   = codegen_flags_jcc_read(ir, Z_FLAG);
+            jump_uop = uop_CMP_IMM_JNZ_DEST(ir, zf_reg, 0);
         } else {
             jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_flags_res, 0);
         }
@@ -293,9 +357,11 @@ ropJE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t nex
         uop_set_jump_dest(ir, jump_uop);
         return 1;
     } else {
+        if (codegen_flags_changed && flags_res_valid())
+            codegen_flags_known_use(ir, 0);
         if (!codegen_flags_changed || !flags_res_valid()) {
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-            jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
+            zf_reg   = codegen_flags_jcc_read(ir, Z_FLAG);
+            jump_uop = uop_CMP_IMM_JZ_DEST(ir, zf_reg, 0);
         } else {
             jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_flags_res, 0);
         }
@@ -308,11 +374,14 @@ int
 ropJNE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t next_pc)
 {
     int jump_uop;
+    int zf_reg;
 
     if (!ZF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr)) {
+        if (codegen_flags_changed && flags_res_valid())
+            codegen_flags_known_use(ir, 0);
         if (!codegen_flags_changed || !flags_res_valid()) {
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-            jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
+            zf_reg   = codegen_flags_jcc_read(ir, Z_FLAG);
+            jump_uop = uop_CMP_IMM_JZ_DEST(ir, zf_reg, 0);
         } else {
             jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_flags_res, 0);
         }
@@ -321,9 +390,11 @@ ropJNE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
         uop_set_jump_dest(ir, jump_uop);
         return 1;
     } else {
+        if (codegen_flags_changed && flags_res_valid())
+            codegen_flags_known_use(ir, 0);
         if (!codegen_flags_changed || !flags_res_valid()) {
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-            jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
+            zf_reg   = codegen_flags_jcc_read(ir, Z_FLAG);
+            jump_uop = uop_CMP_IMM_JNZ_DEST(ir, zf_reg, 0);
         } else {
             jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_flags_res, 0);
         }
@@ -338,8 +409,11 @@ ropJBE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
 {
     int jump_uop;
     int jump_uop2 = -1;
+    int flag_reg;
     int do_unroll = ((CF_SET() || ZF_SET()) && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ZN16:
@@ -370,18 +444,41 @@ ropJBE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
                 jump_uop = uop_CMP_JNBE_DEST(ir, IREG_flags_op1, IREG_flags_op2);
             break;
 
+        case FLAGS_INC8:
+        case FLAGS_INC16:
+        case FLAGS_INC32:
+        case FLAGS_DEC8:
+        case FLAGS_DEC16:
+        case FLAGS_DEC32:
+            /*INC/DEC preserve CF in cpu_state.flags: CF from there, ZF from res*/
+            uop_AND_IMM(ir, IREG_temp0_W, IREG_flags, C_FLAG);
+            if (do_unroll) {
+                /*Both go on to the next copy: ZF first, so that flags_res is
+                  read before either branch (registers are allocated in uOP
+                  order)*/
+                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_flags_res, 0);
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0_W, 0);
+            } else {
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0_W, 0);
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_flags_res, 0);
+            }
+            break;
+
         case FLAGS_UNKNOWN:
         default:
+            /*ZF of a shift keeps the call: an inline read would first load
+              flags_res after the first branch, which the join after both
+              would take as loaded on the path that skipped it*/
             if (do_unroll) {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_CF_SET);
-                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, C_FLAG);
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, flag_reg, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, Z_FLAG);
+                jump_uop  = uop_CMP_IMM_JNZ_DEST(ir, flag_reg, 0);
             } else {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_CF_SET);
-                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, C_FLAG);
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, flag_reg, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, Z_FLAG);
+                jump_uop  = uop_CMP_IMM_JZ_DEST(ir, flag_reg, 0);
             }
             break;
     }
@@ -405,8 +502,11 @@ ropJNBE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t n
 {
     int jump_uop;
     int jump_uop2 = -1;
+    int flag_reg;
     int do_unroll = ((!CF_SET() && !ZF_SET()) && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ZN16:
@@ -437,18 +537,40 @@ ropJNBE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t n
                 jump_uop = uop_CMP_JBE_DEST(ir, IREG_flags_op1, IREG_flags_op2);
             break;
 
+        case FLAGS_INC8:
+        case FLAGS_INC16:
+        case FLAGS_INC32:
+        case FLAGS_DEC8:
+        case FLAGS_DEC16:
+        case FLAGS_DEC32:
+            /*INC/DEC preserve CF in cpu_state.flags: CF from there, ZF from res*/
+            uop_AND_IMM(ir, IREG_temp0_W, IREG_flags, C_FLAG);
+            if (do_unroll) {
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0_W, 0);
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_flags_res, 0);
+            } else {
+                /*ZF first, so that flags_res is read before either branch:
+                  registers are allocated in uOP order, and one first loaded
+                  between the two would be taken as loaded at the join on
+                  the path that skipped the load*/
+                jump_uop2 = uop_CMP_IMM_JZ_DEST(ir, IREG_flags_res, 0);
+                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0_W, 0);
+            }
+            break;
+
         case FLAGS_UNKNOWN:
         default:
+            /*As ropJBE_common: ZF of a shift keeps the call*/
             if (do_unroll) {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_CF_SET);
-                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-                jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, C_FLAG);
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, flag_reg, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, Z_FLAG);
+                jump_uop  = uop_CMP_IMM_JZ_DEST(ir, flag_reg, 0);
             } else {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_CF_SET);
-                jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
-                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, C_FLAG);
+                jump_uop  = uop_CMP_IMM_JNZ_DEST(ir, flag_reg, 0);
+                flag_reg  = codegen_flags_jcc_read(ir, Z_FLAG);
+                jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, flag_reg, 0);
             }
             break;
     }
@@ -474,6 +596,8 @@ ropJS_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t nex
     int jump_uop;
     int do_unroll = (NF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ADD8:
@@ -519,7 +643,7 @@ ropJS_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t nex
 
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_NF_SET);
+            uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_NF_SET);
             if (do_unroll)
                 jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
             else
@@ -540,6 +664,8 @@ ropJNS_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
     int jump_uop;
     int do_unroll = (!NF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
         case FLAGS_ADD8:
@@ -585,7 +711,7 @@ ropJNS_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
 
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_NF_SET);
+            uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_NF_SET);
             if (do_unroll)
                 jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
             else
@@ -606,7 +732,7 @@ ropJP_common(UNUSED(codeblock_t *block), ir_data_t *ir, uint32_t dest_addr, UNUS
 {
     int jump_uop;
 
-    uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_PF_SET);
+    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_PF_SET);
     jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
     jcc_exit(ir, dest_addr);
     uop_set_jump_dest(ir, jump_uop);
@@ -617,7 +743,7 @@ ropJNP_common(UNUSED(codeblock_t *block), ir_data_t *ir, uint32_t dest_addr, UNU
 {
     int jump_uop;
 
-    uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_PF_SET);
+    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_PF_SET);
     jump_uop = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
     jcc_exit(ir, dest_addr);
     uop_set_jump_dest(ir, jump_uop);
@@ -630,6 +756,8 @@ ropJL_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t nex
     int jump_uop;
     int do_unroll = ((NF_SET() ? 1 : 0) != (VF_SET() ? 1 : 0) && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
             /*V flag is always clear. Condition is true if N is set*/
@@ -675,8 +803,10 @@ ropJL_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t nex
 
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, NF_SET_01);
-            uop_CALL_FUNC_RESULT(ir, IREG_temp1, VF_SET_01);
+            if (!codegen_flags_zn_known(ir, IREG_temp0, N_FLAG, (void *) NF_SET_01))
+                uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, NF_SET_01);
+            if (!codegen_flags_zn_known(ir, IREG_temp1, V_FLAG, (void *) VF_SET_01))
+                uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp1, VF_SET_01);
             if (do_unroll)
                 jump_uop = uop_CMP_JNZ_DEST(ir, IREG_temp0, IREG_temp1);
             else
@@ -697,6 +827,8 @@ ropJNL_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
     int jump_uop;
     int do_unroll = ((NF_SET() ? 1 : 0) == (VF_SET() ? 1 : 0) && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_ZN8:
             /*V flag is always clear. Condition is true if N is set*/
@@ -742,8 +874,10 @@ ropJNL_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
 
         case FLAGS_UNKNOWN:
         default:
-            uop_CALL_FUNC_RESULT(ir, IREG_temp0, NF_SET_01);
-            uop_CALL_FUNC_RESULT(ir, IREG_temp1, VF_SET_01);
+            if (!codegen_flags_zn_known(ir, IREG_temp0, N_FLAG, (void *) NF_SET_01))
+                uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, NF_SET_01);
+            if (!codegen_flags_zn_known(ir, IREG_temp1, V_FLAG, (void *) VF_SET_01))
+                uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp1, VF_SET_01);
             if (do_unroll)
                 jump_uop = uop_CMP_JZ_DEST(ir, IREG_temp0, IREG_temp1);
             else
@@ -766,6 +900,8 @@ ropJLE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
     int jump_uop2 = -1;
     int do_unroll = (((NF_SET() ? 1 : 0) != (VF_SET() ? 1 : 0) || ZF_SET()) && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_SUB8:
         case FLAGS_DEC8:
@@ -792,16 +928,22 @@ ropJLE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t ne
         case FLAGS_UNKNOWN:
         default:
             if (do_unroll) {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, Z_FLAG, (void *) jit_ZF_SET))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_ZF_SET);
                 jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, NF_SET_01);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp1, VF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, N_FLAG, (void *) NF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, NF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp1, V_FLAG, (void *) VF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp1, VF_SET_01);
                 jump_uop = uop_CMP_JNZ_DEST(ir, IREG_temp0, IREG_temp1);
             } else {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, Z_FLAG, (void *) jit_ZF_SET))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_ZF_SET);
                 jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, NF_SET_01);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp1, VF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, N_FLAG, (void *) NF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, NF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp1, V_FLAG, (void *) VF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp1, VF_SET_01);
                 jump_uop = uop_CMP_JZ_DEST(ir, IREG_temp0, IREG_temp1);
             }
             break;
@@ -828,6 +970,8 @@ ropJNLE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t n
     int jump_uop2 = -1;
     int do_unroll = ((NF_SET() ? 1 : 0) == (VF_SET() ? 1 : 0) && !ZF_SET() && codegen_can_unroll(block, ir, next_pc, dest_addr));
 
+    if (codegen_flags_changed && (cpu_state.flags_op != FLAGS_UNKNOWN))
+        codegen_flags_known_use(ir, 0);
     switch (codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN) {
         case FLAGS_SUB8:
         case FLAGS_DEC8:
@@ -854,16 +998,22 @@ ropJNLE_common(codeblock_t *block, ir_data_t *ir, uint32_t dest_addr, uint32_t n
         case FLAGS_UNKNOWN:
         default:
             if (do_unroll) {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, Z_FLAG, (void *) jit_ZF_SET))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_ZF_SET);
                 jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, NF_SET_01);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp1, VF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, N_FLAG, (void *) NF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, NF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp1, V_FLAG, (void *) VF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp1, VF_SET_01);
                 jump_uop = uop_CMP_JZ_DEST(ir, IREG_temp0, IREG_temp1);
             } else {
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, Z_FLAG, (void *) jit_ZF_SET))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_ZF_SET);
                 jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp0, NF_SET_01);
-                uop_CALL_FUNC_RESULT(ir, IREG_temp1, VF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp0, N_FLAG, (void *) NF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, NF_SET_01);
+                if (!codegen_flags_zn_known(ir, IREG_temp1, V_FLAG, (void *) VF_SET_01))
+                    uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp1, VF_SET_01);
                 jump_uop = uop_CMP_JNZ_DEST(ir, IREG_temp0, IREG_temp1);
             }
             break;
@@ -1039,8 +1189,10 @@ ropLOOPE(codeblock_t *block, ir_data_t *ir, UNUSED(uint8_t opcode), UNUSED(uint3
         uop_SUB_IMM(ir, IREG_CX, IREG_CX, 1);
         jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_CX, 0);
     }
+    if (codegen_flags_changed && flags_res_valid())
+        codegen_flags_known_use(ir, 0);
     if (!codegen_flags_changed || !flags_res_valid()) {
-        uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
+        uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_ZF_SET);
         jump_uop2 = uop_CMP_IMM_JZ_DEST(ir, IREG_temp0, 0);
     } else {
         jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_flags_res, 0);
@@ -1072,8 +1224,10 @@ ropLOOPNE(codeblock_t *block, ir_data_t *ir, UNUSED(uint8_t opcode), UNUSED(uint
         uop_SUB_IMM(ir, IREG_CX, IREG_CX, 1);
         jump_uop = uop_CMP_IMM_JZ_DEST(ir, IREG_CX, 0);
     }
+    if (codegen_flags_changed && flags_res_valid())
+        codegen_flags_known_use(ir, 0);
     if (!codegen_flags_changed || !flags_res_valid()) {
-        uop_CALL_FUNC_RESULT(ir, IREG_temp0, jit_ZF_SET);
+        uop_CALL_FUNC_RESULT_ORDERED(ir, IREG_temp0, jit_ZF_SET);
         jump_uop2 = uop_CMP_IMM_JNZ_DEST(ir, IREG_temp0, 0);
     } else {
         jump_uop2 = uop_CMP_IMM_JZ_DEST(ir, IREG_flags_res, 0);
@@ -1098,6 +1252,8 @@ setcc_value(ir_data_t *ir, int cc)
     int neg     = cc & 1;
     int flags_op = codegen_flags_changed ? cpu_state.flags_op : FLAGS_UNKNOWN;
 
+    if (flags_op != FLAGS_UNKNOWN)
+        codegen_flags_known_use(ir, 0);
     switch (cc & ~1) {
         case UOP_CC_O:
             switch (flags_op) {

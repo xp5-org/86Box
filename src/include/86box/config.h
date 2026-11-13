@@ -29,10 +29,15 @@ extern "C" {
 extern void config_load_global(void);
 extern int  config_load(void);
 extern void config_save_global(void);
+extern void config_save_global_setting(const char *head, const char *name);
 extern void config_save(void);
 #ifdef USE_RMM
 extern void config_rmm_reload(void);
 extern void config_rmm_foreach(void (*cb)(const char *section, const char *key, const char *value, void *priv), void *priv);
+#endif
+
+#ifdef USE_VFIO
+extern void config_save_vfio_rom(const char *location, const char *rom_fn, int rom_enable);
 #endif
 
 #ifdef EMU_INI_H
