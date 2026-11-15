@@ -1340,7 +1340,6 @@ fdd_rmm_snap(rmm_snap_t *s)
     fdd_drive_t now;
 
     RMM_SNAP_VAR(s, bios_boot_status);
-    RMM_SNAP_VAR(s, fdd_notfound);
     for (int d = 0; d < FDD_NUM; d++) {
         fdd_drive_t *drv = &drives[d];
 

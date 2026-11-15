@@ -818,15 +818,20 @@ const device_t amd_flash_am29f016d_device = {
 void
 amd_flash_rmm_snap(rmm_snap_t *s, void *priv)
 {
-    am29f016d_t *dev = (am29f016d_t *) priv;
-    char         path[sizeof(dev->flash_path)];
-    mem_mapping_t low  = dev->low_mapping;
-    mem_mapping_t high = dev->high_mapping;
+    am29f016d_bios_t *bios = (am29f016d_bios_t *) priv;
+    am29f016d_bios_t  keep = *bios;
+    am29f016d_t      *chip = bios->chip;
+    char              path[sizeof(chip->nvr_path)];
+    const size_t      head = offsetof(am29f016d_t, array);
 
-    memcpy(path, dev->flash_path, sizeof(path));
-    rmm_snap_raw(s, dev, sizeof(am29f016d_t));
-    memcpy(dev->flash_path, path, sizeof(path));
-    dev->low_mapping  = low;
-    dev->high_mapping = high;
+    memcpy(path, chip->nvr_path, sizeof(path));
+    rmm_snap_raw(s, bios, sizeof(*bios));
+    bios->chip       = keep.chip;
+    bios->low_mapping  = keep.low_mapping;
+    bios->high_mapping = keep.high_mapping;
+    rmm_snap_raw(s, chip, head);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, chip->array, sizeof(chip->array));
+    memcpy(chip->nvr_path, path, sizeof(path));
 }
 #endif

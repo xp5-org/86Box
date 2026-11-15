@@ -48,13 +48,6 @@ extern void video_rmm_capture_init(void);
 extern int  video_rmm_capture(const uint32_t **buf, int *w, int *h, uint32_t *seq, int *fresh, int timeout_ms);
 extern void video_rmm_capture_release(void);
 
-/* Implemented by the platform UI: request a pause state change from any thread. */
-extern void plat_pause_async(int p);
-/* Set while do_pause() leaves the CPU thread ack to the caller. UI thread only. */
-extern volatile int rmm_pause_nowait;
-/* The CPU thread's pause acknowledgement, and clearing it once consumed. */
-extern int  rmm_pause_acked(void);
-extern void rmm_pause_ack_clear(void);
 /* Trigger a main-window QAction by object name on the UI thread:
    1 triggered, 0 no such action, -1 disabled. */
 extern int plat_rmm_trigger_action(const char *name);

@@ -887,16 +887,19 @@ const device_t micron_flash_x00_t_device = {
 void
 intel_flash_rmm_snap(rmm_snap_t *s, void *priv)
 {
-    flash_t *dev  = (flash_t *) priv;
-    flash_t  keep = *dev;
+    intel_flash_bios_t *bios = (intel_flash_bios_t *) priv;
+    intel_flash_bios_t  keep = *bios;
+    intel_flash_t      *chip = bios->chip;
+    uint8_t            *arr  = chip->array;
+    char                path[sizeof(chip->nvr_path)];
 
-    rmm_snap_raw(s, dev, sizeof(flash_t));
-    dev->array = keep.array;
-    memcpy(dev->mapping, keep.mapping, sizeof(dev->mapping));
-    memcpy(dev->mapping_h, keep.mapping_h, sizeof(dev->mapping_h));
-    memcpy(dev->exec, keep.exec, sizeof(dev->exec));
-    memcpy(dev->exec_h, keep.exec_h, sizeof(dev->exec_h));
+    memcpy(path, chip->nvr_path, sizeof(path));
+    rmm_snap_raw(s, bios, sizeof(*bios));
+    *bios = keep; /* chip pointer, live mappings and exec pointers */
+    rmm_snap_raw(s, chip, sizeof(*chip));
+    chip->array = arr;
+    memcpy(chip->nvr_path, path, sizeof(path));
     rmm_snap_data(s);
-    rmm_snap_raw(s, dev->array, biosmask + 1);
+    rmm_snap_raw(s, chip->array, chip->size);
 }
 #endif

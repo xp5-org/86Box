@@ -176,6 +176,9 @@ struct usb_dev_t {
 };
 
 extern void usb_dev_init(usb_dev_t *dev);
+#ifdef USE_RMM
+extern void usb_dev_rmm_keep(usb_dev_t *d, const usb_dev_t *live);
+#endif
 extern void usb_dev_bus_reset(usb_dev_t *dev);
 extern int  usb_dev_packet(usb_dev_t *dev, usb_packet_t *p);
 /* The data packet a non-isochronous IN endpoint will answer its next token

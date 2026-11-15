@@ -314,3 +314,18 @@ usb_card_reset(void)
     if (usb_card_type != 0)
         device_add(usb_card_devices[usb_card_type]);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card's PCI config and interrupt state; the controller it owns is its own device. */
+void
+opti861_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    opti861_t *dev  = (opti861_t *) priv;
+    usb_t     *usb  = dev->usb;
+
+    rmm_snap_raw(s, dev, sizeof(opti861_t));
+    dev->usb = usb;
+}
+#endif

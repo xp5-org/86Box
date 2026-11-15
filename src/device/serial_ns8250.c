@@ -1348,14 +1348,13 @@ serial_rmm_snap(rmm_snap_t *s, void *priv)
 {
     serial_t *dev = (serial_t *) priv;
 
+    serial_endpoint_t ep = dev->ep; /* backend and device callbacks stay live */
+
     rmm_snap_raw(s, dev, sizeof(serial_t));
+    dev->ep = ep;
     if (dev->rcvr_fifo)
         rmm_snap_raw(s, dev->rcvr_fifo, sizeof(fifo64_t));
     if (dev->xmit_fifo)
         rmm_snap_raw(s, dev->xmit_fifo, sizeof(fifo64_t));
-    if (dev->sd) {
-        RMM_SNAP_VAR(s, com_ports[dev->inst]);
-        RMM_SNAP_VAR(s, serial_devices[dev->inst]);
-    }
 }
 #endif

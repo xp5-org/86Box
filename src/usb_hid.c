@@ -1304,3 +1304,40 @@ const device_t tablet_usb_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the report state and idle timing of each HID device; descriptors, ops and the host
+   port stay live. The keyboard's lock is a live mutex. */
+void
+hid_mouse_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    hid_mouse_t *dev  = (hid_mouse_t *) priv;
+    hid_mouse_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(hid_mouse_t));
+    usb_dev_rmm_keep(&dev->usb, &keep.usb);
+}
+
+void
+hid_kbd_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    hid_kbd_t *dev  = (hid_kbd_t *) priv;
+    hid_kbd_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(hid_kbd_t));
+    usb_dev_rmm_keep(&dev->usb, &keep.usb);
+    dev->lock = keep.lock;
+}
+
+void
+hid_tablet_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    hid_tablet_t *dev  = (hid_tablet_t *) priv;
+    hid_tablet_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(hid_tablet_t));
+    usb_dev_rmm_keep(&dev->usb, &keep.usb);
+}
+#endif

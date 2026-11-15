@@ -595,3 +595,24 @@ usb_msd_hard_reset(void)
     if (usb_msd_type != 0)
         device_add(usb_msd_devices[usb_msd_type]);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the bulk-only transport state machine. The SCSI target, its command buffer and the
+   string table are live; the target's own state is its own visitor's. */
+void
+usb_msd_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    usb_msd_t *dev  = (usb_msd_t *) priv;
+    usb_msd_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(usb_msd_t));
+    usb_dev_rmm_keep(&dev->bot.usb, &keep.bot.usb);
+    dev->bot.ops    = keep.bot.ops;
+    dev->bot.target = keep.bot.target;
+    dev->bot.buf    = keep.bot.buf;
+    dev->sd         = keep.sd;
+    memcpy(dev->strings, keep.strings, sizeof(dev->strings));
+}
+#endif

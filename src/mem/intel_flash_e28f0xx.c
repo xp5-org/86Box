@@ -757,14 +757,21 @@ const device_t intel_flash_e28f0xx_cobalt3k_device = {
 void
 intel_flash_e28f0xx_rmm_snap(rmm_snap_t *s, void *priv)
 {
-    flash_t *dev  = (flash_t *) priv;
-    flash_t  keep = *dev;
+    e28f0xx_bios_t *bios = (e28f0xx_bios_t *) priv;
+    e28f0xx_bios_t  keep = *bios;
+    e28f0xx_t      *chip = bios->chip;
+    uint8_t        *arr  = chip->array;
+    char            path[sizeof(chip->nvr_path)];
 
-    rmm_snap_raw(s, dev, sizeof(flash_t));
-    dev->array = keep.array;
-    memcpy(dev->mapping, keep.mapping, sizeof(dev->mapping));
-    memcpy(dev->mapping_h, keep.mapping_h, sizeof(dev->mapping_h));
+    memcpy(path, chip->nvr_path, sizeof(path));
+    rmm_snap_raw(s, bios, sizeof(*bios));
+    bios->chip = keep.chip; /* cobalt3k and ctrl are state; the mappings stay live */
+    memcpy(bios->mapping, keep.mapping, sizeof(bios->mapping));
+    memcpy(bios->mapping_h, keep.mapping_h, sizeof(bios->mapping_h));
+    rmm_snap_raw(s, chip, sizeof(*chip));
+    chip->array = arr;
+    memcpy(chip->nvr_path, path, sizeof(path));
     rmm_snap_data(s);
-    rmm_snap_raw(s, dev->array, biosmask + 1);
+    rmm_snap_raw(s, chip->array, chip->size);
 }
 #endif

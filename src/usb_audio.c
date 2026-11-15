@@ -495,3 +495,18 @@ const device_t usb_speaker_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the device, its mixer controls and the playback queue. */
+void
+usb_audio_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    usb_audio_t *dev  = (usb_audio_t *) priv;
+    usb_audio_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(usb_audio_t));
+    usb_dev_rmm_keep(&dev->usb, &keep.usb);
+}
+#endif

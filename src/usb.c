@@ -1850,6 +1850,7 @@ static void
 uhci_port_attach(uhci_t *hc, int i, usb_dev_t *udev)
 {
     hc->port[i].usb = udev;
+    USB_TOPO_BUMP();
     udev->port      = &hc->port[i];
     uhci_schedule_detect(hc);
 }
@@ -2024,6 +2025,7 @@ usb_detach(usb_dev_t *udev)
                 continue;
 
             port->usb = NULL;
+            USB_TOPO_BUMP();
             if (port->sc & UHCI_PORT_CCS) {
                 port->sc |= UHCI_PORT_CSC;
                 /* In global suspend the disconnect is a resume event (UHCI 1.1
@@ -3259,6 +3261,7 @@ static void
 ohci_port_attach(ohci_port_t *p, usb_dev_t *udev)
 {
     p->usb     = udev;
+    USB_TOPO_BUMP();
     udev->port = p;
     ohci_port_detect(p);
     ohci_update_irq(p->hc);
@@ -3277,6 +3280,7 @@ ohci_port_detach(ohci_port_t *p)
         ohci_port_connect_change(p);
     }
     p->usb = NULL;
+    USB_TOPO_BUMP();
     ohci_update_irq(p->hc);
 }
 
@@ -4731,3 +4735,57 @@ const device_t usb_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+volatile uint32_t usb_rmm_topology = 0;
+
+/* Monitor snapshots: the host controller state. The USB and OHCI/UHCI structs hold the devices on their
+   root ports, the back pointers and the IRQ/SMI hooks; those are this process's and stay as they are. */
+void
+usb_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    usb_t        *dev   = (usb_t *) priv;
+    uhci_t       *uhci  = dev->uhci;
+    ohci_t       *ohci  = dev->ohci;
+    mem_mapping_t map   = dev->ohci_mmio_mapping;
+
+    rmm_snap_raw(s, dev, sizeof(usb_t));
+    dev->uhci              = uhci;
+    dev->ohci              = ohci;
+    dev->ohci_mmio_mapping = map;
+
+    if (uhci) {
+        uhci_t keep = *uhci;
+
+        rmm_snap_raw(s, uhci, sizeof(uhci_t));
+        uhci->set_irq  = keep.set_irq;
+        uhci->irq_priv = keep.irq_priv;
+        for (int i = 0; i < UHCI_PORTS; i++) {
+            uhci->port[i].usb = keep.port[i].usb;
+            uhci->port[i].hc  = keep.port[i].hc;
+        }
+    }
+    if (ohci) {
+        ohci_t keep = *ohci;
+
+        rmm_snap_raw(s, ohci, sizeof(ohci_t));
+        ohci->set_irq  = keep.set_irq;
+        ohci->irq_priv = keep.irq_priv;
+        ohci->set_smi  = keep.set_smi;
+        ohci->smi_priv = keep.smi_priv;
+        for (int i = 0; i < OHCI_MAX_PORTS; i++) {
+            ohci->port[i].usb = keep.port[i].usb;
+            ohci->port[i].hc  = keep.port[i].hc;
+        }
+    }
+}
+
+/* The plug/unplug count, for the snapshot's change check. */
+uint32_t
+usb_rmm_snap_topology(void)
+{
+    return usb_rmm_topology;
+}
+#endif

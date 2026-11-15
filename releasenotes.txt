@@ -1,0 +1,207 @@
+RMM (remote machine monitor) design notes
+=========================================
+
+Long explanations removed from source comments. Entries are keyed by file and
+approximate line. Wider design: sourcedir/86box_remote_monitor/rmm_design.md.
+
+
+src/rmm.c ~1  Header, pause-on-connect
+--------------------------------------
+- The emulator pauses when a client connects (rmm_pause_on_connect) and resumes
+  when it leaves, if the monitor caused the pause. rmm_sticky_pause keeps a pause
+  the client asked for. Same contract as the GDB stub, whose socket handling this
+  file borrows.
+- Not applied when the port came from --monitor-port. That is the test runner
+  control channel (box86helpers.Box86Monitor), which stays connected for the whole
+  run and must not freeze the guest.
+- Reads are allowed only while paused. The CPU thread acknowledges the pause
+  (do_pause/ack_pause), so once settled nothing else touches cpu_state.
+
+
+src/86box.c ~2402, src/qt/qt_platform.cpp ~812  Pause across threads
+---------------------------------------------------------------------
+- plat_pause() updates the window title and other UI state, so it runs on the UI
+  thread. The monitor thread requests it and waits.
+- The UI thread must not spin for the CPU thread ack: the CPU thread may be waiting
+  on the UI thread to finish a queued blit. rmm_pause_nowait makes do_pause()
+  skip the wait. rmm_set_pause on the monitor thread waits for the ack instead.
+- rmm_pause_applied is set once plat_pause() has returned.
+
+
+src/cpu/386_dynarec.c ~1, ~1357, ~1592  Self-included interpreter
+-----------------------------------------------------------------
+- The interpreter text is compiled twice. First pass: EXEC386_FN is exec386 and the
+  hook is absent, so the stock interpreter is unchanged byte for byte.
+- Second pass: the debug executor exec386_rmm, swapped into cpu_exec only while a
+  breakpoint or step is armed. RMM_SELF_INCLUDE makes the top part compile once.
+
+
+src/rmm.c ~625  Debug executor
+------------------------------
+- Nothing runs unless something is armed. Then cpu_exec is exec386_rmm, calling
+  rmm_cpu_instruction() before every instruction. When the last breakpoint is
+  cleared and no step is running, the stock executor (usually the dynarec) returns.
+- A hit cannot pause from the CPU thread, since that thread acknowledges pauses.
+  It records the reason, sets rmm_cpu_halted (exec386_rmm then runs nothing, so no
+  guest time passes) and returns. The monitor thread polls (rmm_debug_poll),
+  pauses and sends machine.stopped.
+- The breakpoint table and executor pointer change only while paused.
+
+
+src/rmm.c ~701  Watchpoints
+---------------------------
+- Nothing is touched until one is armed, and then only the watched pages pay.
+  Addresses are linear.
+- Writes: every CPU write path (writemembl/wl/ll/ql and _no_mmut forms) consults
+  page_lookup[linear page] first, and a page with a page_lookup entry never gets a
+  fast writelookup2 entry. A watched page gets page_lookup = &rmm_watch_page, whose
+  handlers check the watch, then translate and do the bus write. mem.c is unchanged.
+- Reads: no such hook. The physical page behind a read-watched linear page gets its
+  read_mapping[] entry replaced by an RMM copy whose handlers forward to the
+  original, then check mem_logical_addr. Fast readlookup2 entries for the page are
+  kept invalid. While armed, mem_addr_is_ram() answers no for such a page; callers
+  are the dynarec (not running while armed) and a sound card DMA shortcut, which
+  then takes the normal path.
+- A hit is recorded during the instruction and reported by the next
+  rmm_cpu_instruction(). As with an x86 data breakpoint, the access has completed
+  and eip is past the instruction.
+- Overrides are checked and repaired before every instruction while armed, since a
+  mapping recalc, shadow-RAM change or new page tables can replace them.
+- Hit actions (ARM, DISARM, REWRITE) run on the CPU thread inside the write
+  handler. REWRITE shows the guest no stop, no event and no guest time.
+
+
+src/rmm.c ~429  memw
+--------------------
+- Goes through the bus write map like a DMA master: RAM takes the bytes, a device
+  range runs its write handler, ROM and unmapped space drop them.
+- A BIOS flash takes the bytes as commands to the chip (mem_rmm_writeb_phys, mem.c).
+- mem_writeb_phys() stores straight into the RAM buffer when cpu_use_exec is set,
+  skipping dirty-page bookkeeping, so translated code built from the old bytes
+  would keep running. DMA calls mem_invalidate_range() for the same reason (dma.c).
+  The diagnostic word "raw" skips the invalidation so a test can show the problem.
+
+
+src/rmm.c ~2851  config.dump / config.load
+------------------------------------------
+- config.dump is the cfg as {section: {key: "value"}}, saved first so it matches
+  the file.
+- config.load stages such an object for the next hard reset. Every named section
+  replaces the running one (replace, default true; [General] is always merged). A
+  null value deletes a key.
+- Hardware names, RAM size and image paths are checked against 86Box tables first.
+  Any failure refuses the whole load with error 10 and data {errors:[...]}. Keys
+  with no check are reported back as unchecked.
+- Staged config.set and config.load share one lock and one drain in
+  rmm_pending_reset_apply(); the load applies first so a config.set lands on top.
+
+
+src/disk/hdd_image.c ~849  Hard disk snapshot overlay (rmm_design.md D.9)
+-------------------------------------------------------------------------
+- Writes still go straight to the image, so the file always holds the disk as the
+  guest sees it now.
+- While any snapshot exists, the first write to a 4K block keeps its previous bytes
+  (base). Each snapshot keeps the bytes it saw of every block written since the
+  first snapshot (view), retaken only for blocks written since the last save or
+  restore.
+- A block a snapshot has no copy of was not written before it, so its base bytes
+  are what it held then.
+- A restore writes back only blocks whose bytes differ from the snapshot's.
+- Copies of the same bytes are shared and reference counted across snapshots.
+- Snapshot files carry, per image, every block with a copy and a hash of the base:
+  the image when opened (with rmm_disk_track) or at the first snapshot. A loading
+  process needs an image whose base hashes the same.
+
+
+src/rmm_snap.c ~335  Pointer scan
+---------------------------------
+- A raw struct dump carries every pointer in it. Restored in the same process they
+  stay valid; a fresh process has other addresses.
+- The scan finds 8-byte words of each dumped region that hold an address of this
+  process, so each visitor can be taught to keep its live pointers. Linux only.
+
+
+src/rmm_snap.c ~726  Async writer
+---------------------------------
+- With RMM_SNAP_DIR set, a thread copies each snapshot device/RAM buffer to a file
+  and frees it, so a snapshot costs host memory only until it is on disk. The guest
+  runs while it writes; save only copies into memory.
+- RMM_SNAP_BUDGET_MB caps bytes not yet on disk (default 2 x RAM + 256 MB). A save
+  over the cap is refused with error 8 rather than made to wait.
+- RMM_SNAP_KEEP=1 leaves the files behind at exit.
+- Only data.buf moves. Small per-snapshot records (device table, media, disk
+  overlay refs) stay in memory. The file is a whole snapshot, the same one
+  snapshot.export writes.
+
+
+src/rmm_snap.c ~1110  Relocation
+--------------------------------
+- Every save also writes a table of the address-looking words in what it dumped:
+  where each is and what it points at. Targets are code or data of a mapped file
+  (module + offset), another dumped region (region + offset), or something else.
+- A restore into another process of the same build and config, with the same dumps
+  in the same order, fixes the words up:
+    - while a region is copied in, its pointer words keep their live values, so a
+      visitor that follows one right away still works;
+    - after the last region, module and region pointers are rewritten to live
+      addresses. Everything else does not change at run time and keeps its live
+      value.
+- Dumps of local variables, such as the timer list, are not state. They are fixed
+  up at once and nothing is written back.
+
+
+src/rmm_snap.c ~1488  Snapshot file layout
+-------------------------------------------
+Written by the async writer and snapshot.export, read by restore and snapshot.load.
+
+  header   magic "RMMSNAP1", version, header length, TSC, tag
+  sections (4-character id, length, bytes), in this order:
+    IDNT   text: machine, CPU, RAM, device table by internal name, floppy and
+           CD-ROM media. The loading machine must give the same text.
+    BILD   text: every mapped file the pointer table refers to, with size and
+           mtime. Must be the same.
+    RELC   the pointer table (relocation)
+    DISK   per hard disk: base hash and the snapshot's blocks (hdd_image.c)
+    DATA   the device/RAM buffer the visitors read back
+    END
+
+The buffer is raw structs, so a file loads only into the same build with the same
+config. The IDNT and BILD checks refuse anything else (error 8) before the machine
+is touched. A file is a disposable fixture; retake it after a rebuild.
+
+
+src/sound/snd_sb.c ~10332  SB16 snapshot
+----------------------------------------
+- The whole sb_t is saved raw: DSP registers and FIFOs, DMA/IRQ latches, CT1745
+  mixer, ASP RAM, recording ring with both indices, output and input timers. Every
+  pointer is set at init and never changes; timers come back through the list
+  rebuild.
+- dsp.pos and dsp.buffer stay as they are now. They belong to the host audio stream
+  and only mean something together with sound_pos_global, which is also not
+  restored. Restoring one without the other leaves the card writing past, or
+  waiting behind, the global position. Cost of leaving them: one buffer of audio
+  that continues from the restored registers. The OPL chip does the same.
+- Not covered, not guest-visible: mixer filter sample history (file statics in
+  sound_util.c and filters.c) and whatever the host MIDI output is still sounding.
+
+
+src/video/vid_ati_rage128.c ~2853, vid_ati_rage128_pm4.c ~1324, vid_ati_rage128.h ~710
+--------------------------------------------------------------------------------------
+- The machine is paused, so the CCE executor and raster workers are drained first,
+  in both directions. With the engine idle the FIFO is empty, and the heap buffers
+  behind it (cce_fifo, payloads, vertex bundle) hold nothing worth keeping. Struct
+  pointers, events and thread handles stay valid in this process.
+- Not covered: a command stream in flight when the snapshot is taken (drained, not
+  saved), the optional GPU backend, the DDC bus state. On restore every VRAM page
+  is marked changed so the next frame redraws.
+- The drain aborts a packet the executor is waiting on the rest of, since the stopped
+  guest cannot write it. The head of that packet is kept in cce_resume and queued
+  again (rage128_pm4_resume_requeue) for the running machine on save and after the
+  put-back on restore, so the tail the guest writes next still has its header.
+  Without it the tail parses as new packets and the engine loses its place.
+- cce_snap_keep is set around the drain; the executor fills the buffer when it
+  aborts a packet under it.
+- Kept per packet type: type 0 and 1 apply each dword as it arrives, so a header for
+  the registers not yet written is kept. A type-3 packet runs only once its payload
+  is whole, so its header and the dwords gathered so far are kept. Anything else
+  (shutdown, guest reset pulse) keeps nothing; that abort is a drop.

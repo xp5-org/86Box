@@ -47,6 +47,7 @@ typedef int rmm_socket_t;
 #include <86box/mem.h>
 #include <86box/io.h>
 #include <86box/plat.h>
+#include <86box/runctl.h>
 #include <86box/thread.h>
 #include <86box/keyboard.h>
 #include <stdbool.h> /* before sound.h */
@@ -107,9 +108,6 @@ int rmm_pause_on_connect = 1;
 int rmm_sticky_pause     = 0;
 int rmm_sticky_cmdline   = 0;
 volatile int rmm_hard_resets = 0;
-
-/* Set by the platform UI once a plat_pause_async() request has been applied. */
-volatile int rmm_pause_applied = -1;
 
 static rmm_socket_t   listen_socket = RMM_BAD_SOCKET;
 static rmm_socket_t   client_socket = RMM_BAD_SOCKET;
@@ -194,35 +192,19 @@ rmm_send(const char *fmt, ...)
 
 /* ---------------------------------------------------------- pause/run */
 
-/* Ask the UI thread for a pause state; wait for it to apply and, on pause,
-   for the CPU thread ack. */
+/* Pause or resume through the run controller (any thread). A pause returns
+   once the CPU thread is parked. Only the USER/FOCUS reasons are ours to clear:
+   a dialog or fatal pause stays, and then the result is 0. */
 static int
 rmm_set_pause(int want_paused)
 {
-    const int was_paused = !!dopause;
-
-    rmm_pause_ack_clear(); /* a stale ack from a timed-out pause */
-    for (int tries = 0; tries < 10; tries++) {
-        rmm_pause_applied = -1;
-        plat_pause_async(want_paused);
-        for (int i = 0; i < 50; i++) {
-            if ((rmm_pause_applied >= 0) && (!!dopause == !!want_paused))
-                goto applied;
-            plat_delay_ms(10);
-        }
-    }
+    if (want_paused)
+        runctl_pause_wait(RUN_PAUSE_USER);
+    else
+        runctl_resume(RUN_PAUSE_USER_RESUMABLE);
+    for (int i = 0; i < 50 && (!!dopause != !!want_paused); i++)
+        plat_delay_ms(10);
     return !!dopause == !!want_paused;
-
-applied:
-    if (want_paused && !was_paused) { /* only a running -> paused change is acked by the CPU thread */
-        /* the CPU thread ack is slow under valgrind */
-        for (int i = 0; i < 6000 && !rmm_pause_acked(); i++)
-            plat_delay_ms(10);
-        if (!rmm_pause_acked())
-            return 0;
-        rmm_pause_ack_clear();
-    }
-    return 1;
 }
 
 static const char *
@@ -2378,8 +2360,9 @@ static const struct {
     const char *key;
     int         on_reset; /* 0 applies now, 1 staged for the next hard reset */
     int         def;
-    int       (*min)(void);
-    int       (*max)(void);
+    /* lo/hi, not min/max: windows.h defines function-like min()/max() macros */
+    int       (*lo)(void);
+    int       (*hi)(void);
     int       (*step)(void);
     int       (*get)(void);
     void      (*set)(int v);
@@ -2906,7 +2889,7 @@ rmm_fits_gfxcard_2(UNUSED(const rmm_enum_row_t *row), const rmm_enum_ctx_t *ctx,
         return 0;
     if (i == VID_EXTERNAL)
         return machine_has_flags(ctx->machine_idx, MACHINE_VIDEO_EXT) > 0;
-    return video_card_available(i) && device_is_valid(dev, ctx->machine_idx) && (video_card_get_flags(i) == VIDEO_FLAG_TYPE_SECONDARY) &&
+    return video_card_available(i) && device_is_valid(dev, ctx->machine_idx) && (video_card_get_flags(i) == VIDEO_FLAG_TYPE_SEC) &&
            !(card && (card->flags & DEVICE_AGP) && dev && (dev->flags & DEVICE_AGP));
 }
 
@@ -3301,8 +3284,8 @@ rpc_config_describe(cJSON *params, rmm_rpc_err_t *err)
     reply = cJSON_CreateObject();
     cJSON_AddStringToObject(reply, "type", "int");
     cJSON_AddStringToObject(reply, "applies", rmm_cfg[rw].on_reset ? "reset" : "now");
-    cJSON_AddNumberToObject(reply, "min", rmm_cfg[rw].min());
-    cJSON_AddNumberToObject(reply, "max", rmm_cfg[rw].max());
+    cJSON_AddNumberToObject(reply, "min", rmm_cfg[rw].lo());
+    cJSON_AddNumberToObject(reply, "max", rmm_cfg[rw].hi());
     cJSON_AddNumberToObject(reply, "step", rmm_cfg[rw].step());
     cJSON_AddNumberToObject(reply, "default", rmm_cfg[rw].def);
     return reply;
@@ -3323,10 +3306,10 @@ rpc_config_set(cJSON *params, rmm_rpc_err_t *err)
     if (!cJSON_IsNumber(value_item) || (value_item->valuedouble != (double) (int) value_item->valuedouble))
         return rpc_fail(err, RPC_INVALID_PARAMS, "'value' must be an integer");
     val = (int) value_item->valuedouble;
-    if ((val < rmm_cfg[row].min()) || (val > rmm_cfg[row].max()) ||
-        ((val - rmm_cfg[row].min()) % rmm_cfg[row].step()))
+    if ((val < rmm_cfg[row].lo()) || (val > rmm_cfg[row].hi()) ||
+        ((val - rmm_cfg[row].lo()) % rmm_cfg[row].step()))
         return rpc_fail(err, RPC_INVALID_PARAMS, "%s must be %d..%d in steps of %d", rmm_cfg[row].key,
-                        rmm_cfg[row].min(), rmm_cfg[row].max(), rmm_cfg[row].step());
+                        rmm_cfg[row].lo(), rmm_cfg[row].hi(), rmm_cfg[row].step());
 
     if (!rmm_cfg[row].on_reset) {
         rmm_cfg[row].set(val);
@@ -3855,7 +3838,7 @@ rpc_machine_quit(UNUSED(cJSON *params), UNUSED(rmm_rpc_err_t *err))
 /* -- get/set properties: <name>.get, <name>.set {value}. Set triggers the menu QAction
    when the value differs. */
 
-static int prop_fast_forward(void) { return !!fast_forward; }
+static int prop_fast_forward(void) { return runctl_mode() == RUN_MODE_FAST; }
 static int prop_force_interp(void) { return !!cpu_force_interpreter; }
 static int prop_sound_muted(void) { return !!sound_muted; }
 

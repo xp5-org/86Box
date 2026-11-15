@@ -558,6 +558,11 @@ typedef struct modem_t {
     uint32_t         ppp_dns2;
 } modem_t;
 
+#ifdef USE_RMM
+/* The modem the machine holds, for the snapshot check. */
+static modem_t *rmm_modem;
+#endif
+
 static void modem_do_command(modem_t *modem, int repeat);
 static modem_profile_state_t
 modem_profile_state(modem_t *modem)
@@ -4883,6 +4888,9 @@ modem_init(UNUSED(const device_t *info))
         modem_read_phonebook_file(modem, phonebook_file);
     }
 
+#ifdef USE_RMM
+    rmm_modem = modem;
+#endif
     return modem;
 }
 
@@ -4890,6 +4898,9 @@ void
 modem_close(void *priv)
 {
     modem_t *modem = (modem_t *) priv;
+#ifdef USE_RMM
+    rmm_modem = NULL;
+#endif
 
     /* Stop callbacks before reset/teardown.  The command-pause timer is
        periodic and rearms itself; the host-to-serial timer also rearms on
@@ -5655,3 +5666,81 @@ const device_t modem_device = {
     .force_redraw  = NULL,
     .config        = modem_config
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the COM-port modem, the same shape as the network one (net_modem.c). The char port,
+   host sockets, sound, log and call contexts are live; the data FIFOs' buffers are saved as data. */
+void
+char_modem_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    modem_t         *modem   = (modem_t *) priv;
+    char_port_t     *cport   = modem->char_port;
+    netcard_t       *card    = modem->card;
+    void            *log     = modem->log;
+    modem_sound_t   *sound   = modem->sound;
+    const char      *endwhy  = modem->end_reason;
+    SOCKET           server  = modem->serversocket;
+    SOCKET           client  = modem->clientsocket;
+    SOCKET           waiting = modem->waitingclientsocket;
+    uint8_t         *rx_data = modem->rx_data.data;
+    uint8_t         *pending = modem->data_pending.data;
+    uint8_t         *char_tx = modem->char_tx_data.data;
+    ppp_ctx_t       *ppp     = modem->ppp_ctx;
+    cslip_ctx_t     *cslip   = modem->cslip_ctx;
+    slip_auth_ctx_t *sauth   = modem->slip_auth_ctx;
+#    ifdef ENABLE_VSERVER
+    vserver_t *vsrv = modem->vserver;
+#        ifdef ENABLE_VSERVER_NETBEUI
+    nbf_t *nbf = modem->nbf;
+#        endif
+#        ifdef ENABLE_VSERVER_IPX
+    ipx_t *ipx = modem->ipx;
+#        endif
+#    endif
+
+    rmm_snap_raw(s, modem, sizeof(modem_t));
+    modem->char_port           = cport;
+    modem->card                = card;
+    modem->log                 = log;
+    modem->sound               = sound;
+    modem->end_reason          = endwhy;
+    modem->serversocket        = server;
+    modem->clientsocket        = client;
+    modem->waitingclientsocket = waiting;
+    modem->rx_data.data        = rx_data;
+    modem->data_pending.data   = pending;
+    modem->char_tx_data.data   = char_tx;
+    modem->ppp_ctx             = ppp;
+    modem->cslip_ctx           = cslip;
+    modem->slip_auth_ctx       = sauth;
+#    ifdef ENABLE_VSERVER
+    modem->vserver = vsrv;
+#        ifdef ENABLE_VSERVER_NETBEUI
+    modem->nbf = nbf;
+#        endif
+#        ifdef ENABLE_VSERVER_IPX
+    modem->ipx = ipx;
+#        endif
+#    endif
+    rmm_snap_data(s);
+    rmm_snap_raw(s, rx_data, modem->rx_data.capacity);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, pending, modem->data_pending.capacity);
+    rmm_snap_data(s);
+    rmm_snap_raw(s, char_tx, modem->char_tx_data.capacity);
+}
+
+const char *
+char_modem_rmm_snap_blocked(void)
+{
+    if (rmm_modem && (rmm_modem->connected || rmm_modem->ringing || rmm_modem->tcpIpConnInProgress
+                      || (rmm_modem->clientsocket != -1) || (rmm_modem->waitingclientsocket != -1)))
+        return "the COM modem has a call or a connection up (the peer is a host socket that cannot be rewound)";
+    if (rmm_modem && (rmm_modem->ppp_active || rmm_modem->ras_active || rmm_modem->ppp_ctx || rmm_modem->cslip_enabled
+                      || rmm_modem->slip_auth_ctx))
+        return "the COM modem has a PPP, RAS or SLIP session up (its protocol context cannot be rewound)";
+    return NULL;
+}
+#endif

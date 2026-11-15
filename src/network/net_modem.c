@@ -4877,23 +4877,57 @@ modem_init(UNUSED(const device_t *info))
 void
 modem_rmm_snap(rmm_snap_t *s, void *priv)
 {
-    modem_t   *modem    = (modem_t *) priv;
-    serial_t  *serial   = modem->serial;
-    netcard_t *card     = modem->card;
-    SOCKET     server   = modem->serversocket;
-    SOCKET     client   = modem->clientsocket;
-    SOCKET     waiting  = modem->waitingclientsocket;
-    uint8_t   *rx_data  = modem->rx_data.data;
-    uint8_t   *pending  = modem->data_pending.data;
+    modem_t       *modem   = (modem_t *) priv;
+    ser_port_t    *serial  = modem->serial;
+    netcard_t     *card    = modem->card;
+    void          *log     = modem->log;
+    modem_sound_t *sound   = modem->sound;
+    const char    *endwhy  = modem->end_reason;
+    SOCKET         server  = modem->serversocket;
+    SOCKET         client  = modem->clientsocket;
+    SOCKET         waiting = modem->waitingclientsocket;
+    uint8_t       *rx_data = modem->rx_data.data;
+    uint8_t       *pending = modem->data_pending.data;
+    /* ppp_ctx and slip_auth_ctx are heap objects born and freed with a call: a snapshot is refused while
+       one exists (modem_rmm_snap_blocked), so both sides of a round trip hold NULL. cslip_ctx lives as
+       long as the device. Keep the live values in every case, so a restore can never plant a pointer to
+       a context that is gone. */
+    ppp_ctx_t       *ppp   = modem->ppp_ctx;
+    cslip_ctx_t     *cslip = modem->cslip_ctx;
+    slip_auth_ctx_t *sauth = modem->slip_auth_ctx;
+#    ifdef ENABLE_VSERVER
+    vserver_t *vsrv = modem->vserver;
+#        ifdef ENABLE_VSERVER_NETBEUI
+    nbf_t *nbf = modem->nbf;
+#        endif
+#        ifdef ENABLE_VSERVER_IPX
+    ipx_t *ipx = modem->ipx;
+#        endif
+#    endif
 
     rmm_snap_raw(s, modem, sizeof(modem_t));
     modem->serial               = serial;
     modem->card                 = card;
+    modem->log                  = log;
+    modem->sound                = sound;
+    modem->end_reason           = endwhy;
     modem->serversocket         = server;
     modem->clientsocket         = client;
     modem->waitingclientsocket  = waiting;
     modem->rx_data.data         = rx_data;
     modem->data_pending.data    = pending;
+    modem->ppp_ctx              = ppp;
+    modem->cslip_ctx            = cslip;
+    modem->slip_auth_ctx        = sauth;
+#    ifdef ENABLE_VSERVER
+    modem->vserver = vsrv;
+#        ifdef ENABLE_VSERVER_NETBEUI
+    modem->nbf = nbf;
+#        endif
+#        ifdef ENABLE_VSERVER_IPX
+    modem->ipx = ipx;
+#        endif
+#    endif
     rmm_snap_data(s);
     rmm_snap_raw(s, rx_data, modem->rx_data.capacity);
     rmm_snap_data(s);
@@ -4906,6 +4940,10 @@ modem_rmm_snap_blocked(void)
     if (rmm_modem && (rmm_modem->connected || rmm_modem->ringing || rmm_modem->tcpIpConnInProgress
                       || (rmm_modem->clientsocket != -1) || (rmm_modem->waitingclientsocket != -1)))
         return "the modem has a call or a connection up (the peer is a host socket that cannot be rewound)";
+    /* ppp_ctx and slip_auth_ctx exist per call; cslip_ctx lives as long as the device (idle until VJ is on). */
+    if (rmm_modem && (rmm_modem->ppp_active || rmm_modem->ras_active || rmm_modem->ppp_ctx || rmm_modem->cslip_enabled
+                      || rmm_modem->slip_auth_ctx))
+        return "the modem has a PPP, RAS or SLIP session up (its protocol context is a heap object that cannot be rewound)";
     return NULL;
 }
 #endif

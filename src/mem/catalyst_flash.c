@@ -519,14 +519,19 @@ const device_t amd_am28f010_flash_device = {
 void
 catalyst_flash_rmm_snap(rmm_snap_t *s, void *priv)
 {
-    flash_t *dev  = (flash_t *) priv;
-    flash_t  keep = *dev;
+    catalyst_bios_t *bios = (catalyst_bios_t *) priv;
+    catalyst_bios_t  keep = *bios;
+    catalyst_t      *chip = bios->chip;
+    uint8_t         *arr  = chip->array;
+    char             path[sizeof(chip->nvr_path)];
 
-    rmm_snap_raw(s, dev, sizeof(flash_t));
-    dev->array   = keep.array;
-    dev->mapping = keep.mapping;
-    memcpy(dev->mapping_h, keep.mapping_h, sizeof(dev->mapping_h));
+    memcpy(path, chip->nvr_path, sizeof(path));
+    rmm_snap_raw(s, bios, sizeof(*bios));
+    *bios      = keep; /* chip pointer and the live mappings */
+    rmm_snap_raw(s, chip, sizeof(*chip));
+    chip->array = arr;
+    memcpy(chip->nvr_path, path, sizeof(path));
     rmm_snap_data(s);
-    rmm_snap_raw(s, dev->array, 0x20000);
+    rmm_snap_raw(s, chip->array, chip->size);
 }
 #endif

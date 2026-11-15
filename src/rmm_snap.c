@@ -83,6 +83,8 @@ extern const device_t pc87307_both_device;
 extern const device_t pc97307_device;
 extern const device_t isp1020a_device;
 extern const device_t mouse_mtouch_device;
+extern const device_t mouse_usb_device;
+extern const device_t tablet_usb_device;
 extern const device_t mouse_upc_device;
 extern const device_t mouse_upc_standalone_device;
 extern const device_t ps55da2_device;
@@ -298,6 +300,7 @@ typedef struct rmm_snapshot_t {
     rmm_snap_devref_t *devs;       /* the device table when taken */
     void              *media[2 * FDD_NUM];
     uint32_t           cdmedia[CDROM_NUM]; /* cdrom_rmm_snap_media() */
+    uint32_t           usbtopo;    /* usb_rmm_snap_topology(): plugs and unplugs so far */
     void              *disks;      /* hdd_image_rmm_save() */
     uint8_t           *reloc;      /* pointer table, see "relocation" */
     size_t             reloclen;
@@ -368,7 +371,7 @@ static const struct {
     FDC(fdc_at_winbond_device), FDC(fdc_at_nsc_device), FDC(fdc_at_nsc_pc87310_device),
     FDC(fdc_at_nsc_dp8473_device), FDC(fdc_ps2_device), FDC(fdc_ps2_mca_device),
 #define UART(d) { &d, serial_rmm_snap, 0 }
-    UART(ns8250_device), UART(ns8250_pcjr_3f8_device), UART(ns8250_pcjr_2f8_device),
+    UART(ns8250_device),
     UART(ns16450_device), UART(ns16550_device), UART(ns16650_device), UART(ns16750_device),
     UART(ns16850_device), UART(ns16950_device),
     { &lpt_port_device,          lpt_rmm_snap,        0 },
@@ -522,7 +525,16 @@ static const struct {
     { &ddma_device,                  NULL,                   sizeof(ddma_t) },
     { &acpi_sis_5595_1997_device,    NULL,                   sizeof(acpi_t) },
     { &sis5595_smbus_device,         NULL,                   sizeof(smbus_sis5595_t) },
-    { &usb_device,                   NULL,                   sizeof(usb_t) },
+    { &usb_device,                   usb_rmm_snap,           0 },
+    { &usb_opti_82c861_device,       opti861_rmm_snap,       0 },
+    { &usb_via_vt83c572_device,      vt83c572_rmm_snap,      0 },
+    { &usb_hub_4port_device,         usb_hub_rmm_snap,       0 },
+    { &usb_msd_device,               usb_msd_rmm_snap,       0 },
+    { &usb_flash_device,             usb_flash_rmm_snap,     0 },
+    { &usb_speaker_device,           usb_audio_rmm_snap,     0 },
+    { &mouse_usb_device,             hid_mouse_rmm_snap,     0 },
+    { &keyboard_usb_device,          hid_kbd_rmm_snap,       0 },
+    { &tablet_usb_device,            hid_tablet_rmm_snap,    0 },
     { &ne2000_compat_device,         ne2k_rmm_snap,          0 },
     { &dp8390_device,                dp8390_rmm_snap,        0 },
     { &ati_rage128_pro_device,       rage128_rmm_snap,       0 },
@@ -1173,6 +1185,7 @@ static const struct {
     { &voodoo_device, voodoo_rmm_snap, 0 },
     { &ibm5140_device, ibm5140_rmm_snap, 0 },
     { &modem_device, modem_rmm_snap, 0 },
+    { &char_modem_device, char_modem_rmm_snap, 0 },
     { &lpt_prt_escp_device, prt_escp_rmm_snap, 0 },
     { &cassette_device, cassette_rmm_snap, 0 },
     { &pcjx_device, pcjx_rmm_snap, 0 },
@@ -1899,6 +1912,8 @@ rmm_snap_unsupported(char *why, size_t n)
             r = rdisk_rmm_snap_blocked();
         if (!r)
             r = modem_rmm_snap_blocked();
+        if (!r)
+            r = char_modem_rmm_snap_blocked();
         if (!r)
             r = cassette_rmm_snap_blocked();
         if (r) {
@@ -3380,6 +3395,7 @@ rmm_snap_save(const char *tag, char *why, size_t n)
     snap->ident      = rmm_snap_ident(snap->devs, snap->ndevs);
     fdd_rmm_snap_media(snap->media);
     cdrom_rmm_snap_media(snap->cdmedia);
+    snap->usbtopo = usb_rmm_snap_topology();
     if (rmm_snap_scan_load_maps() == 0) {
         scan_nhits   = 0;
         scan_dropped = 0;
@@ -3462,6 +3478,10 @@ rmm_snap_restore(const char *tag, char *why, size_t n)
             snprintf(why, n, "a CD-ROM disc was inserted or ejected after snapshot '%s' was taken", tag);
             return RMM_E_CANNOT;
         }
+    }
+    if (!snap->foreign && (usb_rmm_snap_topology() != snap->usbtopo)) {
+        snprintf(why, n, "a USB device was plugged or unplugged after snapshot '%s' was taken", tag);
+        return RMM_E_CANNOT;
     }
     if (hdd_image_rmm_check(snap->disks, why, n)) {
         size_t used = strlen(why);
@@ -3619,6 +3639,7 @@ rmm_snap_load(const char *path, const char *tag, char *tag_out, size_t tn, char 
     snap->generation = rmm_hard_resets;
     fdd_rmm_snap_media(snap->media);
     cdrom_rmm_snap_media(snap->cdmedia);
+    snap->usbtopo  = usb_rmm_snap_topology();
     snap->disks    = disks;
     snap->reloc    = reloc;
     snap->reloclen = (size_t) lay.len[2];

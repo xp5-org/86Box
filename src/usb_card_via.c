@@ -237,3 +237,18 @@ const device_t usb_via_vt83c572_device = {
     .force_redraw  = NULL,
     .config        = NULL
 };
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the card's PCI config and interrupt state; the controller it owns is its own device. */
+void
+vt83c572_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    vt83c572_t *dev = (vt83c572_t *) priv;
+    usb_t      *usb = dev->usb;
+
+    rmm_snap_raw(s, dev, sizeof(vt83c572_t));
+    dev->usb = usb;
+}
+#endif

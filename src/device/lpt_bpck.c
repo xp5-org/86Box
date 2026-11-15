@@ -887,7 +887,7 @@ void
 bpck_rmm_snap(rmm_snap_t *s, void *priv)
 {
     bpck_t        *dev      = (bpck_t *) priv;
-    void          *lpt      = dev->lpt;
+    bpck_link_t    link     = dev->link; /* port handle, ops, log: live */
     void          *log      = dev->log;
     scsi_device_t *sd       = dev->sd;
     ide_tf_t      *tf       = dev->tf;
@@ -895,7 +895,7 @@ bpck_rmm_snap(rmm_snap_t *s, void *priv)
     uint8_t        no_drive = dev->no_drive;
 
     rmm_snap_raw(s, dev, sizeof(bpck_t));
-    dev->lpt      = lpt;
+    dev->link     = link;
     dev->log      = log;
     dev->sd       = sd;
     dev->tf       = tf;

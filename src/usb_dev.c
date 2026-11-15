@@ -770,3 +770,25 @@ usb_dev_packet(usb_dev_t *dev, usb_packet_t *p)
 {
     return usb_dev_transact(dev, p);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: after a device's whole struct was copied over, put back the usb_dev_t members that
+   point at live things (descriptors, ops, the host port and the hubs): they are this process's, and the
+   topology check (usb_rmm_snap_topology) has already refused a restore across a plug or unplug. */
+void
+usb_dev_rmm_keep(usb_dev_t *d, const usb_dev_t *live)
+{
+    d->name        = live->name;
+    d->dev_desc    = live->dev_desc;
+    d->cfg_desc    = live->cfg_desc;
+    d->strings     = live->strings;
+    d->ops         = live->ops;
+    d->priv        = live->priv;
+    d->port        = live->port;
+    d->parent      = live->parent;
+    d->home_port   = live->home_port;
+    d->home_parent = live->home_parent;
+}
+#endif

@@ -502,6 +502,7 @@ static void
 hub_port_attach(usb_dev_t *udev, usb_hub_port_t *p, usb_dev_t *dev)
 {
     p->dev      = dev;
+    USB_TOPO_BUMP();
     dev->port   = p;
     dev->parent = udev;
     if (hub_port_power_good(p))
@@ -548,6 +549,7 @@ hub_detach(UNUSED(usb_dev_t *udev), usb_dev_t *dev)
     hub_port_disable(p);
     p->status &= ~(PS_CONNECTION | PS_LOW_SPEED);
     p->dev      = NULL;
+    USB_TOPO_BUMP();
     dev->port   = NULL;
     dev->parent = NULL;
 }
@@ -764,3 +766,21 @@ usb_hub_reset(void)
     if (usb_hub_type != 0)
         device_add(usb_hub_devices[usb_hub_type]);
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: the hub's own device state and each downstream port's status; what sits on a port is
+   that device's own visitor (and the topology check refuses a restore across a plug). */
+void
+usb_hub_rmm_snap(rmm_snap_t *s, void *priv)
+{
+    usb_hub_t *dev  = (usb_hub_t *) priv;
+    usb_hub_t  keep = *dev;
+
+    rmm_snap_raw(s, dev, sizeof(usb_hub_t));
+    usb_dev_rmm_keep(&dev->usb, &keep.usb);
+    for (int i = 0; i < HUB_PORTS; i++)
+        dev->port[i].dev = keep.port[i].dev;
+}
+#endif

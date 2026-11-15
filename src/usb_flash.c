@@ -1193,3 +1193,35 @@ usb_flash_create(const char *fn, uint64_t bytes, int fs)
         ok = 0;
     return ok;
 }
+
+#ifdef USE_RMM
+#    include <86box/rmm_snap.h>
+
+/* Monitor snapshots: each plugged stick's transport and SCSI state. The image file, its data buffers and
+   the string table are live; which sticks are plugged is the USB topology's, and a restore across a
+   plug or unplug is refused there. */
+void
+usb_flash_rmm_snap(rmm_snap_t *s, UNUSED(void *priv))
+{
+    for (int k = 0; k < USB_PORTS_MAX; k++) {
+        usb_flash_t *dev = usb_flash_sticks[k];
+        int          here = (dev != NULL);
+
+        RMM_SNAP_VAR(s, here);
+        if (!here || (dev == NULL))
+            continue;
+
+        usb_flash_t keep = *dev;
+
+        rmm_snap_raw(s, dev, sizeof(usb_flash_t));
+        usb_dev_rmm_keep(&dev->bot.usb, &keep.bot.usb);
+        dev->bot.ops    = keep.bot.ops;
+        dev->bot.target = keep.bot.target;
+        dev->bot.buf    = keep.bot.buf;
+        dev->fp         = keep.fp;
+        dev->buf        = keep.buf;
+        dev->buf_sz     = keep.buf_sz;
+        memcpy(dev->strings, keep.strings, sizeof(dev->strings));
+    }
+}
+#endif

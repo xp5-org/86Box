@@ -25,6 +25,7 @@
  */
 #include <stdio.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 #include <wchar.h>
@@ -1345,11 +1346,19 @@ const device_t amd_flash_29f002nbt_device = {
 void
 sst_rmm_snap(rmm_snap_t *s, void *priv)
 {
-    sst_t *dev = (sst_t *) priv;
+    sst_bios_t *bios = (sst_bios_t *) priv;
+    sst_t      *chip = bios->chip;
 
-    rmm_snap_raw(s, dev, sizeof(sst_t));
+    RMM_SNAP_VAR(s, bios->force_128);
+    RMM_SNAP_VAR(s, bios->xor);
+    RMM_SNAP_VAR(s, bios->enabled);
+    RMM_SNAP_VAR(s, bios->enabled_h);
+    /* Live: the mappings, their exec pointers, the sector table, the path and the page-write timer
+       (the timer list is the timers' own). */
+    rmm_snap_raw(s, chip, offsetof(sst_t, sectors));
+    rmm_snap_raw(s, chip->page_buffer, sizeof(chip->page_buffer) + sizeof(chip->page_dirty));
     rmm_snap_data(s);
-    rmm_snap_raw(s, dev->array, biosmask + 1);
+    rmm_snap_raw(s, chip->array, chip->mask + 1);
 }
 #endif
 const device_t amd_flash_29f040a_device = {

@@ -35,6 +35,14 @@ typedef struct usb_t {
     uint8_t       card; /* on a PCI USB card, not on the board */
 } usb_t;
 
+/* Counts every plug and unplug: a monitor snapshot is only restored across none. */
+#ifdef USE_RMM
+extern volatile uint32_t usb_rmm_topology;
+#    define USB_TOPO_BUMP() (usb_rmm_topology++)
+#else
+#    define USB_TOPO_BUMP() ((void) 0)
+#endif
+
 /* Global variables. */
 extern const device_t usb_device;
 /* A USB mass storage bridge to a SCSI bus. */

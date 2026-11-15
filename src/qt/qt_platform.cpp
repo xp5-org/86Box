@@ -840,21 +840,6 @@ run_state_changed(void)
 }
 
 #ifdef USE_RMM
-extern volatile int rmm_pause_applied;
-extern volatile int rmm_pause_nowait;
-
-/* Runs plat_pause() on the UI thread for the monitor thread. */
-void
-plat_pause_async(int p)
-{
-    QMetaObject::invokeMethod(qApp, [p] {
-        rmm_pause_nowait = 1; /* do_pause() must not spin on the CPU ack */
-        plat_pause(p);
-        rmm_pause_nowait = 0;
-        rmm_pause_applied = p;
-    }, Qt::QueuedConnection);
-}
-
 /* Trigger a main-window QAction by object name on the UI thread.
    1 triggered, 0 no such action, -1 disabled. */
 int

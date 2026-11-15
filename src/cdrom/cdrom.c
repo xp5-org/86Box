@@ -4732,6 +4732,8 @@ cdrom_rmm_snap_blocked(void)
             continue;
         if (!cdrom_rmm_snappable(cdrom[i].bus_type))
             return "a CD-ROM drive on the USB bus is attached (no snapshot support for it)";
+        if (cdrom[i].ops && cdrom[i].ops->get_write_info)
+            return "a recordable disc is mounted in a CD-ROM drive (its image file and burn session cannot be rewound)";
         if (strstr(cdrom[i].image_path, "ioctl://") == cdrom[i].image_path)
             return "a CD-ROM drive has a host drive mounted (its disc can change under the snapshot)";
     }
@@ -4793,6 +4795,7 @@ cdrom_rmm_snap(rmm_snap_t *s)
             KEEP(log);
             KEEP(insert);
             KEEP(close);
+            KEEP(insert_blank);
             KEEP(get_volume);
             KEEP(get_channel);
             KEEP(sound_on);
