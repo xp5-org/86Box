@@ -220,6 +220,7 @@ extern const device_t lm75_w83781d_device;
 extern const device_t lm77_0_48_device;
 extern const device_t lm78_al440lx_device;
 extern const device_t lm78_device;
+extern const device_t sis5595_dam_device;
 extern const device_t mouse_ibm7690_touch_device;
 extern const device_t mouse_logibus_device;
 extern const device_t mouse_logibus_onboard_device;
@@ -618,6 +619,7 @@ static const struct {
     { &as99127f_rev2_device, hwm_lm78_rmm_snap, 0 },
     { &lm78_al440lx_device, hwm_lm78_rmm_snap, 0 },
     { &lm78_device, hwm_lm78_rmm_snap, 0 },
+    { &sis5595_dam_device, hwm_lm78_rmm_snap, 0 }, /* SiS 5595 hardware monitor: an lm78_t too */
     { &w83781d_device, hwm_lm78_rmm_snap, 0 },
     { &w83781d_p5a_device, hwm_lm78_rmm_snap, 0 },
     { &w83782d_device, hwm_lm78_rmm_snap, 0 },
